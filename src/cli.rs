@@ -208,39 +208,47 @@ impl Doctor {
         let _ = writeln!(out, "Detected issues");
         let _ = writeln!(out);
         for c in &failures {
-            let _ = writeln!(
-                out,
-                " {} — {}",
-                c.name,
-                c.reason.as_deref().unwrap_or("unknown")
-            );
+            let _ = writeln!(out, " {}", c.name);
+            if let Some(ref reason) = c.reason {
+                let _ = writeln!(out, "   {reason}");
+            }
         }
         let _ = writeln!(out);
 
-        // Separates auto-fixable from manual
+        // Automatic fixes (package installs that can be scripted)
         if !self.fix_commands.is_empty() {
-            let _ = writeln!(out, "Would run");
+            let _ = writeln!(out, "Automatic fixes");
             let _ = writeln!(out);
             for cmd in &self.fix_commands {
                 let _ = writeln!(out, "  {cmd}");
             }
             let _ = writeln!(out);
-            let _ = writeln!(out, "No commands were executed.");
-            let _ = writeln!(out, "Run the commands above manually if you wish to fix.");
+            let _ = writeln!(out, "Run the commands above to apply automatically.");
+            let _ = writeln!(out);
         }
 
-        // Flag issues that require manual action (e.g. reboot)
-        let manual: Vec<&&Check> = failures
+        // Manual actions (reboot, kernel config, architecture)
+        let manual_names: Vec<&str> = failures
             .iter()
-            .filter(|c| c.reason.as_deref().is_some_and(|r| r.contains("reboot")))
+            .filter(|c| {
+                c.reason.as_deref().is_some_and(|r| {
+                    r.contains("reboot")
+                        || r.contains("CONFIG_RUST")
+                        || r.contains("Zenvecha requires")
+                })
+            })
+            .map(|c| c.name)
             .collect();
 
-        if !manual.is_empty() {
-            let _ = writeln!(out, "Manual action required");
+        if !manual_names.is_empty() {
+            let _ = writeln!(out, "Manual actions");
             let _ = writeln!(out);
-            for c in manual {
-                let _ = writeln!(out, " {}", c.reason.as_deref().unwrap_or(""));
+            for (i, name) in manual_names.iter().enumerate() {
+                let _ = writeln!(out, " {}. {name} — see details above", i + 1);
             }
+            let _ = writeln!(out);
+            let _ = writeln!(out, "These require manual intervention.");
+            let _ = writeln!(out, "No commands were executed.");
         }
     }
 
