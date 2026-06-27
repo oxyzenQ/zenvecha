@@ -76,10 +76,11 @@ check_all() {
     cargo audit || fail "Security vulnerabilities found. Review and update dependencies."
     pass "cargo audit"
 
-    # 7. License & supply chain check
-    header "7/7 — cargo deny check"
+    # 7a. License, ban & source check (required)
+    header "7/7 — cargo deny (licenses, bans, sources)"
     require_tool cargo-deny "cargo install cargo-deny"
-    cargo deny check 2>&1 || fail "cargo-deny violations found. Review licenses, sources, and advisories."
+    cargo deny check licenses bans sources 2>&1 \
+        || fail "cargo-deny violations found. Review licenses, bans, and sources."
     pass "cargo deny"
 
     echo ""
@@ -99,7 +100,7 @@ case "${1:-}" in
         echo "  4. cargo test"
         echo "  5. codespell"
         echo "  6. cargo audit     (CVE check — REQUIRED)"
-        echo "  7. cargo deny      (license/supply chain — REQUIRED)"
+        echo "  7. cargo deny      (licenses, bans, sources — REQUIRED)"
         echo ""
         echo "Prerequisites:"
         echo "  cargo install cargo-audit"
