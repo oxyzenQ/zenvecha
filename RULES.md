@@ -97,7 +97,7 @@ Dependencies are a last resort.
 ## 📁 8. REQUIRED DOCS
 
 - `RULES.md` — this file
-- `trademark.md`
+- `TRADEMARK.md`
 - `SECURITY.md`
 - `SUPPORT.md`
 - `ROADMAP.md`

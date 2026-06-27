@@ -1,105 +1,103 @@
 # Threat Model — Zenvecha
 
-## Scope
+## Why Runtime Kernel Patching Is Dangerous
 
-This document analyzes security threats specific to Zenvecha's operation as a kernel-level live patching system.
+Modifying kernel behavior at runtime is one of the most inherently risky operations in systems programming:
 
-## Assets
+1. **Ring 0 Execution** — Any bug in patch logic runs with full kernel privileges. There is no supervisor to catch a mistake.
+2. **Concurrency** — Kernel functions may be executing on multiple CPUs simultaneously when a patch is applied. Race conditions can corrupt kernel state.
+3. **No Isolation** — Unlike userspace processes, kernel memory is shared globally. A corrupted data structure affects the entire system.
+4. **Silent Corruption** — Kernel bugs often manifest as mysterious crashes minutes or hours after the root cause, making debugging extremely difficult.
+5. **ABI Fragility** — Kernel internal ABIs change between versions (and sometimes between configs of the same version). A patch validated on one kernel may crash another.
 
-| Asset | Criticality | Description |
-|-------|-------------|-------------|
-| Patch files (`.zenv`) | High | Tampered patches can inject arbitrary kernel code |
-| Kernel symbol table | High | Symbol hijacking risk |
-| Kernel module (zenvecha.ko) | Critical | Runs in ring 0 |
-| Patch metadata/checksums | High | Integrity verification foundation |
+**This is why Zenvecha prioritizes safety over features, and correctness over performance.**
 
-## Threat Actors
+---
 
-| Actor | Motivation | Capability |
-|-------|-----------|------------|
-| Malicious patch author | Inject kernel malware | Can craft `.zenv` files |
-| Local unprivileged user | Escalate privileges | Limited by Linux DAC/MAC |
-| Compromised dependency | Supply chain attack | Rust crate with backdoor |
-| Network attacker | MITM on update check | Can spoof version info |
+## Unsupported Scenarios
 
-## Threats
+Zenvecha explicitly does NOT support:
+
+- Patching interrupt handlers or NMI context
+- Patching during suspend/resume transitions
+- Patching scheduler internals while real-time tasks are running
+- Concurrent patching from multiple Zenvecha instances
+- Patching functions that modify kernel page tables
+- Patching on kernels with `kptr_restrict=2`
+- Production server environments
+
+---
+
+## Design Philosophy
+
+```
+Read-Only First → Validate → Apply → Verify → Monitor → Rollback
+```
+
+Every patch operation follows this sequence. No step is skipped. No optimization that bypasses safety.
+
+## Trust Boundaries
+
+```
+┌──────────────────────────────────────┐
+│           Untrusted Zone              │
+│  (user input, .zenv files, network)   │
+└──────────────┬───────────────────────┘
+               │ Validation boundary
+               ▼
+┌──────────────────────────────────────┐
+│           Trusted Zone                │
+│  (parser, validator, checksum)        │
+└──────────────┬───────────────────────┘
+               │ Kernel boundary (syscall)
+               ▼
+┌──────────────────────────────────────┐
+│           Ring 0                      │
+│  (zenvecha.ko, hook engine)           │
+└──────────────────────────────────────┘
+```
+
+**Rule:** No data crosses a trust boundary without validation.
+
+## Supply Chain Philosophy
+
+- **Minimal dependencies** — Every crate is a potential attack vector
+- **No auto-updated dependencies** — Manual review for kernel-level project
+- **Pinned versions** — `Cargo.lock` is committed and verified
+- **`cargo audit` on every build** — Advisory warnings are non-blocking but reviewed
+- **No build-time code generation from external sources** — All code is in-repo
+
+## Assets Under Protection
+
+| Asset | Criticality | Threat |
+|-------|-------------|--------|
+| Kernel memory integrity | Critical | Malicious patch, buggy hook |
+| System stability | Critical | Race condition, ABI mismatch |
+| Patch authenticity | High | Tampered `.zenv` file |
+| Symbol table integrity | High | Symbol hijacking |
+| Build pipeline | High | Compromised dependency |
+
+## Attack Vectors
 
 ### T1 — Malicious Patch Injection
-- **Vector:** Attacker provides a crafted `.zenv` patch file
-- **Impact:** Arbitrary code execution in kernel space (ring 0)
-- **Mitigation:**
-  - Cryptographic signature verification (planned v0.2)
-  - Checksum validation before load
-  - Manual review requirement for all patches
-  - Source verification before application
+**Risk:** Critical. A crafted `.zenv` file could inject arbitrary kernel code.
+**Mitigation:** Cryptographic signatures (planned), checksum verification, manual review.
 
-### T2 — Symbol Hijacking
-- **Vector:** Attacker replaces or redirects kernel symbols
-- **Impact:** Patch applied to wrong target, unpredictable behavior
-- **Mitigation:**
-  - Symbol address verification against kallsyms
-  - ABI compatibility check
-  - Pre-patch snapshot for rollback
+### T2 — Supply Chain Compromise
+**Risk:** High. A compromised Rust dependency builds malicious kernel code.
+**Mitigation:** Minimal deps, cargo audit, pinned versions, manual review.
 
-### T3 — Supply Chain Compromise
-- **Vector:** Malicious code in a Rust dependency
-- **Impact:** Compromised binary with kernel privileges
-- **Mitigation:**
-  - Minimal dependency policy
-  - `cargo audit` on every build
-  - Manual dependency review
-  - Pinned dependency versions in `Cargo.lock`
+### T3 — Race Condition Exploitation
+**Risk:** High. Concurrent kernel execution during patch apply/remove.
+**Mitigation:** Use kernel livepatch consistency model, `stop_machine()` where needed.
 
-### T4 — Rollback Failure
-- **Vector:** Patch removal fails, leaving system in undefined state
-- **Impact:** Kernel instability, possible panic
-- **Mitigation:**
-  - Atomic hook operations (where supported by kernel)
-  - Pre-patch state preservation
-  - Health monitoring with auto-rollback trigger
-  - Fallback to safe state on any failure
+### T4 — ABI Drift Attack
+**Risk:** Medium. Patch validated against wrong kernel version/configuration.
+**Mitigation:** Kernel ABI fingerprint, version locking, pre-patch verification.
 
-### T5 — Race Condition in Hook
-- **Vector:** Concurrent access to hooked function during patch apply/remove
-- **Impact:** Kernel crash, data corruption
-- **Mitigation:**
-  - Use kernel's ftrace with stop_machine() where available
-  - Proper synchronization primitives
-  - Short critical sections
-
-### T6 — Information Leak via Logs
-- **Vector:** Sensitive kernel data exposed in Zenvecha logs
-- **Impact:** Information disclosure to unprivileged users
-- **Mitigation:**
-  - Sanitize log output
-  - Kernel address filtering (`%pK`)
-  - Configurable log level
-
-## Risk Matrix
-
-| Threat | Likelihood | Impact | Risk |
-|--------|-----------|--------|------|
-| T1 — Malicious patch | Low | Critical | Medium |
-| T2 — Symbol hijacking | Low | High | Medium |
-| T3 — Supply chain | Medium | Critical | High |
-| T4 — Rollback failure | Medium | High | High |
-| T5 — Race condition | Low | Critical | Medium |
-| T6 — Info leak | Medium | Low | Low |
-
-## Security Boundaries
-
-```
-User Space  │  Kernel Space
-            │
-  CLI ──────┼──→ zenvecha.ko
-            │        │
-  .zenv ────┼──→ Validator → Hook Engine
-            │        │
-            │        ▼
-            │   Target Function
-```
-
-All user space ↔ kernel space transitions are security boundaries. Every input crossing this boundary must be validated.
+### T5 — Rollback Interception
+**Risk:** Medium. Attacker prevents rollback, leaving system in patched state.
+**Mitigation:** Health monitoring, watchdog-based auto-rollback.
 
 ---
 

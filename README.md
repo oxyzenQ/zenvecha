@@ -5,7 +5,7 @@
 <h1 align="center">zenvecha</h1>
 
 <p align="center">
-  <strong>Safe runtime patching for selected Linux desktop kernel fixes without requiring an immediate reboot.</strong>
+  <strong>Experimental runtime Linux kernel patching research.</strong>
 </p>
 
 <p align="center">
@@ -16,23 +16,29 @@
 
 ---
 
-## Vision
+## Status
 
-> **Reboot only when you choose, not when a routine kernel fix forces you to.**
-
-zenvecha is an experimental Rust-based live kernel patching engine. It aims to reduce unnecessary reboots on Linux desktop systems by applying safe, verified runtime function patches.
-
-**zenvecha does NOT claim to eliminate reboots.** It targets selected, well-understood kernel fixes — starting small and expanding as safety guarantees improve.
+**Research** — v0.0.1 Foundation phase. No kernel patching implemented.
 
 ---
 
-## Status
+## Mission
 
-**Phase 0 — Foundation (v0.0.1 "Genesis")**
+zenvecha researches safe, verifiable methods for applying runtime patches to the Linux kernel on desktop systems. The long-term goal is to reduce unnecessary reboots — not eliminate them.
 
-Repository structure, CI, docs, and build system. No patching yet.
+### Goals
 
-See [ROADMAP.md](ROADMAP.md) for the full development plan.
+- Reduce unnecessary desktop reboots
+- Safety first — never compromise system stability
+- Open source (GPL-3.0-only)
+- Desktop-first (Arch Linux / CachyOS, x86_64, kernel 6.x)
+
+### What zenvecha is NOT
+
+- ❌ A universal "no reboot" solution for Linux
+- ❌ A production server patching tool
+- ❌ A replacement for proper kernel updates
+- ❌ A bypass for kernel security mechanisms
 
 ---
 
@@ -63,22 +69,11 @@ zenvecha --version
 | CachyOS     | ✅ Supported  |
 | Kernel 6.x  | ✅ Supported  |
 | x86_64      | ✅ Supported  |
+| ARM64       | ❌ Not yet    |
+| Windows     | ❌ Never      |
+| macOS       | ❌ Never      |
 
 See [SUPPORT.md](SUPPORT.md) for details.
-
----
-
-## Architecture
-
-```
-zenvecha CLI → Patch Validator → Kernel Module → Target Function
-```
-
-- **Kernel module** (`kernel/`) — Symbol discovery, function hooking via livepatch/ftrace
-- **Userspace** (`userspace/`) — Patch loading, validation, rollback
-- **CLI** (`src/`) — Command interface, version management
-
-See [DESIGN.md](DESIGN.md) and [docs/architecture.md](docs/architecture.md) for details.
 
 ---
 
@@ -86,14 +81,14 @@ See [DESIGN.md](DESIGN.md) and [docs/architecture.md](docs/architecture.md) for 
 
 | Document | Description |
 |----------|-------------|
-| [RULES.md](RULES.md) | Project engineering rules |
-| [ROADMAP.md](ROADMAP.md) | Development roadmap |
-| [DESIGN.md](DESIGN.md) | Architecture design |
-| [SECURITY.md](SECURITY.md) | Security policy |
-| [SUPPORT.md](SUPPORT.md) | Platform support |
-| [trademark.md](trademark.md) | Trademark & IP |
+| [RULES.md](RULES.md) | Engineering rules & philosophy |
+| [ROADMAP.md](ROADMAP.md) | Development milestones |
+| [DESIGN.md](DESIGN.md) | Architecture overview |
+| [SECURITY.md](SECURITY.md) | Security policy & reporting |
+| [SUPPORT.md](SUPPORT.md) | Platform support matrix |
+| [TRADEMARK.md](TRADEMARK.md) | Trademark & IP |
 | [docs/architecture.md](docs/architecture.md) | Detailed architecture |
-| [docs/threat-model.md](docs/threat-model.md) | Threat model |
+| [docs/threat-model.md](docs/threat-model.md) | Threat analysis |
 | [docs/limitations.md](docs/limitations.md) | Known limitations |
 | [docs/adr/](docs/adr/) | Architecture Decision Records |
 
