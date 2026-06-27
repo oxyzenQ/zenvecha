@@ -1,0 +1,42 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Package tarball
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          ARCH="linux-amd64"
+          PKG_DIR="zenvecha-${TAG}-${ARCH}"
+          mkdir -p "${PKG_DIR}"
+          cp target/release/zenvecha "${PKG_DIR}/"
+          cp README.md LICENSE "${PKG_DIR}/"
+          tar czf "${PKG_DIR}.tar.gz" "${PKG_DIR}"
+          sha512sum "${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.sha512sum"
+
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            zenvecha-*.tar.gz
+            zenvecha-*.tar.gz.sha512sum
+          generate_release_notes: true

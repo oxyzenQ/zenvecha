@@ -1,0 +1,7 @@
+[package]
+name = "zenvecha-kernel"
+version = "0.0.1"
+edition = "2024"
+description = "Zenvecha kernel module"
+authors = ["rezky_nightky (oxyzenQ) <with dot rezky at gmail dot com>"]
+license = "GPL-3.0-only"

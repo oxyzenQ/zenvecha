@@ -1,0 +1,35 @@
+[package]
+name = "zenvecha"
+version = "0.0.1"
+edition = "2024"
+rust-version = "1.96"
+description = "Zenvecha — Safe runtime patching for selected Linux desktop kernel fixes without requiring an immediate reboot."
+authors = ["rezky_nightky (oxyzenQ) <with dot rezky at gmail dot com>"]
+license = "GPL-3.0-only"
+repository = "https://github.com/oxyzenQ/zenvecha"
+homepage = "https://github.com/oxyzenQ/zenvecha"
+documentation = "https://github.com/oxyzenQ/zenvecha"
+readme = "README.md"
+keywords = ["linux", "kernel", "live-patching", "runtime", "security"]
+categories = ["os", "command-line-utilities"]
+
+[workspace]
+members = [
+    "kernel",
+    "userspace",
+]
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = true
+lto = "thin"
+codegen-units = 1
+panic = "unwind"
+overflow-checks = false
+incremental = false
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
