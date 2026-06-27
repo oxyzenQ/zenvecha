@@ -3,52 +3,61 @@
 
 //! Integration tests for Zenvecha.
 
+fn zenvecha_bin() -> std::path::PathBuf {
+    std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("zenvecha")
+}
+
+fn run(args: &[&str]) -> Option<std::process::Output> {
+    std::process::Command::new(zenvecha_bin())
+        .args(args)
+        .output()
+        .ok()
+}
+
 #[test]
 fn test_version_flag() {
-    let output = std::process::Command::new(
-        std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("zenvecha"),
-    )
-    .arg("-V")
-    .output();
-
-    match output {
-        Ok(o) => {
-            let stdout = String::from_utf8_lossy(&o.stdout);
-            assert!(stdout.contains("zenvecha"), "version output missing");
-        }
-        Err(_) => {
-            // Binary may not exist in CI test run — skip
-        }
+    let output = run(&["-V"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("zenvecha"));
+        assert!(stdout.contains("v0."));
+        assert!(stdout.contains("rezky_nightky"));
+        assert!(stdout.contains("GPL-3.0"));
     }
 }
 
 #[test]
 fn test_doctor_runs() {
-    let output = std::process::Command::new(
-        std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("zenvecha"),
-    )
-    .arg("doctor")
-    .output();
+    let output = run(&["doctor"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha Doctor"));
+        assert!(stdout.contains("Detected"));
+        assert!(stdout.contains("Checks"));
+        assert!(stdout.contains("Overall"));
+    }
+}
 
-    match output {
-        Ok(o) => {
-            let stdout = String::from_utf8_lossy(&o.stdout);
-            assert!(
-                stdout.contains("Zenvecha Doctor"),
-                "doctor output missing header"
-            );
-            assert!(stdout.contains("Status:"), "doctor output missing status");
-        }
-        Err(_) => {
-            // Binary may not exist — skip
-        }
+#[test]
+fn test_doctor_fix_mode() {
+    let output = run(&["doctor", "--fix"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha Doctor"));
+        assert!(stdout.contains("Would run"));
+        assert!(stdout.contains("No commands were executed"));
+    }
+}
+
+#[test]
+fn test_unknown_command() {
+    let output = run(&["nonexistent"]);
+    if let Some(o) = output {
+        let stderr = String::from_utf8_lossy(&o.stderr);
+        assert!(stderr.contains("unknown command"));
     }
 }

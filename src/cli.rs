@@ -3,7 +3,6 @@
 
 //! CLI dispatch — command routing.
 
-use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
@@ -25,7 +24,10 @@ pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {
     match args[1].as_str() {
         "-V" | "--version" => print_version(),
         "--check-update" => check_update()?,
-        "doctor" => Doctor::new().run()?,
+        "doctor" => {
+            let fix_mode = args.get(2).map(|s| s.as_str()) == Some("--fix");
+            Doctor::new().run(fix_mode)?;
+        }
         _ => {
             eprintln!("zenvecha: unknown command '{}'", args[1]);
             print_usage();
@@ -44,6 +46,7 @@ fn print_usage() {
     let _ = writeln!(out, "  zenvecha -V, --version    Show version");
     let _ = writeln!(out, "  zenvecha --check-update    Check latest release");
     let _ = writeln!(out, "  zenvecha doctor            Check system readiness");
+    let _ = writeln!(out, "  zenvecha doctor --fix      Show fix commands");
     let _ = writeln!(out);
     let _ = writeln!(out, "See docs/ for full documentation.");
 }
@@ -82,217 +85,108 @@ fn check_update() -> Result<(), Box<dyn std::error::Error>> {
 // ---- doctor ----------------------------------------------------------------
 
 struct Doctor {
-    checks: Vec<CheckResult>,
+    distro: Option<String>,
+    kernel: Option<String>,
+    architecture: Option<String>,
+    checks: Vec<Check>,
+    fix_commands: Vec<String>,
 }
 
-struct CheckResult {
+struct Check {
     name: &'static str,
-    detail: String,
     passed: bool,
-    reason: Option<String>,
+    reason: Option<&'static str>,
 }
 
 impl Doctor {
     fn new() -> Self {
         Self {
-            checks: Vec::with_capacity(6),
+            distro: detect_distro(),
+            kernel: kernel_version(),
+            architecture: arch(),
+            checks: Vec::with_capacity(4),
+            fix_commands: Vec::new(),
         }
     }
 
-    fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
+    fn run(mut self, fix_mode: bool) -> Result<(), Box<dyn std::error::Error>> {
+        // Pre-compute values to avoid borrow conflicts
+        let kver = self.kernel.clone();
+        let distro = self.distro.clone();
+        let arch_val = self.architecture.clone();
+        let kver_d: Option<&str> = kver.as_deref();
+        let distro_d: Option<&str> = distro.as_deref();
+        let arch_d: Option<&str> = arch_val.as_deref();
+
+        // --- Checks ---
+        let kernel_ok = self.check_kernel(kver_d);
+        let arch_ok = self.check_architecture(arch_d);
+        let rust_ok = self.check_rust();
+        let headers_ok = self.check_headers(distro_d, kver_d);
+        let r4l_ok = self.check_r4l(kver_d);
+
+        // --- Output ---
         let stdout = io::stdout();
         let mut out = stdout.lock();
-
-        let distro = detect_distro();
-        let kern_ver = kernel_version();
 
         let _ = writeln!(out, "Zenvecha Doctor");
         let _ = writeln!(out);
 
-        // If distro detected, show it
-        if let Some(ref d) = distro {
-            let _ = writeln!(out, "Detected distro: {d}");
-            let _ = writeln!(out);
+        // Detected
+        let _ = writeln!(out, "Detected");
+        let _ = writeln!(out);
+        if let Some(ref d) = self.distro {
+            let _ = writeln!(out, " Distribution : {d}");
+        }
+        if let Some(ref k) = self.kernel {
+            let _ = writeln!(out, " Kernel       : {k}");
+        }
+        if let Some(ref a) = self.architecture {
+            let _ = writeln!(out, " Architecture : {a}");
+        }
+        let _ = writeln!(out);
+
+        if fix_mode {
+            self.print_fix_mode(&mut out);
+            return Ok(());
         }
 
-        // --- Check: Kernel version ---
-        let kernel_ok = match &kern_ver {
-            Some(ver) => {
-                let ok = ver.starts_with("6.");
-                self.checks.push(CheckResult {
-                    name: "Kernel version",
-                    detail: ver.clone(),
-                    passed: ok,
-                    reason: if ok {
-                        None
-                    } else {
-                        Some(format!(
-                            "Detected kernel {ver}, Zenvecha requires Linux 6.x."
-                        ))
-                    },
-                });
-                ok
-            }
-            None => {
-                self.checks.push(CheckResult {
-                    name: "Kernel version",
-                    detail: "unknown".into(),
-                    passed: false,
-                    reason: Some("Could not read /proc/version.".into()),
-                });
-                false
-            }
-        };
-
-        // --- Check: CPU architecture ---
-        let arch_ok = match arch() {
-            Some(a) => {
-                let ok = a == "x86_64";
-                self.checks.push(CheckResult {
-                    name: "CPU architecture",
-                    detail: a.clone(),
-                    passed: ok,
-                    reason: if ok {
-                        None
-                    } else {
-                        Some(format!("Detected {a}, Zenvecha requires x86_64."))
-                    },
-                });
-                ok
-            }
-            None => {
-                self.checks.push(CheckResult {
-                    name: "CPU architecture",
-                    detail: "unknown".into(),
-                    passed: false,
-                    reason: Some("uname -m failed.".into()),
-                });
-                false
-            }
-        };
-
-        // --- Check: Rust compiler ---
-        let rust_ok = match rust_version() {
-            Some(ver) => {
-                self.checks.push(CheckResult {
-                    name: "Rust compiler",
-                    detail: ver,
-                    passed: true,
-                    reason: None,
-                });
-                true
-            }
-            None => {
-                self.checks.push(CheckResult {
-                    name: "Rust compiler",
-                    detail: "not found".into(),
-                    passed: false,
-                    reason: Some(
-                        "rustc is not in PATH. Install: curl --proto '=https' \
-                         --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-                            .into(),
-                    ),
-                });
-                false
-            }
-        };
-
-        // --- Check: Kernel headers ---
-        let headers_ok = kernel_headers_present(kern_ver.as_deref());
-        let headers_detail = if headers_ok {
-            "detected".to_string()
-        } else {
-            "not found".to_string()
-        };
-        let headers_reason = if headers_ok {
-            None
-        } else {
-            let pkg = header_package_name(distro.as_deref(), kern_ver.as_deref());
-            Some(format!("Missing kernel headers. Install: {pkg}"))
-        };
-        self.checks.push(CheckResult {
-            name: "Kernel headers",
-            detail: headers_detail,
-            passed: headers_ok,
-            reason: headers_reason,
-        });
-
-        // --- Check: Rust-for-Linux (CONFIG_RUST) ---
-        let r4l_ok = rust_for_linux_detected(kern_ver.as_deref());
-        let r4l_detail = if r4l_ok {
-            "detected".to_string()
-        } else {
-            "not detected".to_string()
-        };
-        let r4l_reason = if r4l_ok {
-            None
-        } else {
-            Some(
-                "Running kernel was not built with CONFIG_RUST=y. \
-                 Boot a Rust-enabled kernel (linux-zen on Arch, \
-                 default on CachyOS)."
-                    .into(),
-            )
-        };
-        self.checks.push(CheckResult {
-            name: "Rust-for-Linux",
-            detail: r4l_detail,
-            passed: r4l_ok,
-            reason: r4l_reason,
-        });
-
-        // --- Print results ---
+        // Checks
+        let _ = writeln!(out, "Checks");
+        let _ = writeln!(out);
         for c in &self.checks {
-            let mark = if c.passed { "+" } else { "-" };
-            let _ = writeln!(out, "[{mark}] {:<20} {}", c.name, c.detail);
+            let mark = if c.passed { "[+]" } else { "[-]" };
+            let _ = writeln!(out, "{mark} {}", c.name);
+            if !c.passed
+                && let Some(reason) = c.reason
+            {
+                let _ = writeln!(out, "    {reason}");
+            }
         }
         let _ = writeln!(out);
 
-        // --- Readiness score ---
-        let passed = self.checks.iter().filter(|c| c.passed).count();
-        let total = self.checks.len();
-        let _ = writeln!(out, "Readiness score");
-        let _ = writeln!(out);
-        let _ = writeln!(out, " {passed} / {total} checks passed");
-        let _ = writeln!(out);
-
-        // --- Reasons ---
-        let failures: Vec<&CheckResult> = self.checks.iter().filter(|c| !c.passed).collect();
-        if !failures.is_empty() {
-            let _ = writeln!(out, "Reason");
+        // Suggested actions
+        if !self.fix_commands.is_empty() {
+            let _ = writeln!(out, "Suggested actions");
             let _ = writeln!(out);
-            for f in &failures {
-                if let Some(ref reason) = f.reason {
-                    let _ = writeln!(out, " {}", reason);
+            for (i, cmd) in self.fix_commands.iter().enumerate() {
+                let _ = writeln!(out, " {}. {cmd}", i + 1);
+                // Verification hint after header install
+                if cmd.contains("headers") || cmd.contains("kernel-devel") {
+                    let _ = writeln!(out, "    Verify: ls /lib/modules/$(uname -r)/build");
                 }
             }
             let _ = writeln!(out);
         }
 
-        // --- Suggested actions ---
-        if !headers_ok || !r4l_ok {
-            let _ = writeln!(out, "Suggested actions");
-            let _ = writeln!(out);
-            let mut step = 1;
-            if !headers_ok {
-                let pkg = header_package_name(distro.as_deref(), kern_ver.as_deref());
-                let _ = writeln!(out, " {step}. sudo {pkg}");
-                step += 1;
-            }
-            if !r4l_ok {
-                let _ = writeln!(out, " {step}. Boot a Rust-enabled kernel");
-                step += 1;
-            }
-            if !rust_ok {
-                let _ = writeln!(out, " {step}. Install Rust via https://rustup.rs");
-            }
-            let _ = writeln!(out);
-        }
-
-        // --- Status ---
+        // Overall
+        let passed = self.checks.iter().filter(|c| c.passed).count();
+        let total = self.checks.len();
         let ready = kernel_ok && arch_ok && rust_ok && headers_ok && r4l_ok;
-        let _ = writeln!(out, "Status");
+
+        let _ = writeln!(out, "Overall");
         let _ = writeln!(out);
+        let _ = writeln!(out, " {passed} / {total}");
         if ready {
             let _ = writeln!(out, " READY");
         } else {
@@ -300,6 +194,142 @@ impl Doctor {
         }
 
         Ok(())
+    }
+
+    fn print_fix_mode(&self, out: &mut io::StdoutLock<'_>) {
+        if self.fix_commands.is_empty() {
+            let _ = writeln!(out, "All checks passed. Nothing to fix.");
+            return;
+        }
+        let _ = writeln!(out, "Would run");
+        let _ = writeln!(out);
+        for cmd in &self.fix_commands {
+            let _ = writeln!(out, "  {cmd}");
+        }
+        let _ = writeln!(out);
+        let _ = writeln!(out, "No commands were executed.");
+        let _ = writeln!(out, "Run the commands above manually if you wish to fix.");
+    }
+
+    // -- individual checks --------------------------------------------------
+
+    fn check_kernel(&mut self, kver: Option<&str>) -> bool {
+        match kver {
+            Some(ver) => {
+                let ok = ver.starts_with("6.");
+                self.checks.push(Check {
+                    name: "Kernel version",
+                    passed: ok,
+                    reason: if !ok {
+                        Some("Zenvecha requires Linux 6.x.")
+                    } else {
+                        None
+                    },
+                });
+                ok
+            }
+            None => {
+                self.checks.push(Check {
+                    name: "Kernel version",
+                    passed: false,
+                    reason: Some("Could not read /proc/version."),
+                });
+                false
+            }
+        }
+    }
+
+    fn check_architecture(&mut self, arch_val: Option<&str>) -> bool {
+        match arch_val {
+            Some(a) => {
+                let ok = a == "x86_64";
+                self.checks.push(Check {
+                    name: "CPU architecture",
+                    passed: ok,
+                    reason: if !ok {
+                        Some("Zenvecha requires x86_64.")
+                    } else {
+                        None
+                    },
+                });
+                ok
+            }
+            None => {
+                self.checks.push(Check {
+                    name: "CPU architecture",
+                    passed: false,
+                    reason: Some("uname -m failed."),
+                });
+                false
+            }
+        }
+    }
+
+    fn check_rust(&mut self) -> bool {
+        match rust_version() {
+            Some(_ver) => {
+                self.checks.push(Check {
+                    name: "Rust compiler",
+                    passed: true,
+                    reason: None,
+                });
+                true
+            }
+            None => {
+                let cmd = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh";
+                self.fix_commands.push(cmd.to_string());
+                self.checks.push(Check {
+                    name: "Rust compiler",
+                    passed: false,
+                    reason: Some("rustc is not in PATH."),
+                });
+                false
+            }
+        }
+    }
+
+    fn check_headers(&mut self, distro: Option<&str>, kver: Option<&str>) -> bool {
+        let present = kver.is_some_and(|v| Path::new(&format!("/lib/modules/{v}/build")).exists());
+
+        if present {
+            self.checks.push(Check {
+                name: "Kernel headers",
+                passed: true,
+                reason: None,
+            });
+            return true;
+        }
+
+        // Build exact header package command
+        let pkg_cmd = header_package_command(distro, kver);
+        self.fix_commands.push(pkg_cmd.clone());
+
+        self.checks.push(Check {
+            name: "Kernel headers",
+            passed: false,
+            reason: Some("Missing kernel headers."),
+        });
+        false
+    }
+
+    fn check_r4l(&mut self, kver: Option<&str>) -> bool {
+        let detected = kver.is_some_and(r4l_detected);
+
+        if detected {
+            self.checks.push(Check {
+                name: "Rust-for-Linux",
+                passed: true,
+                reason: None,
+            });
+            return true;
+        }
+
+        self.checks.push(Check {
+            name: "Rust-for-Linux",
+            passed: false,
+            reason: Some("Boot a kernel built with CONFIG_RUST=y."),
+        });
+        false
     }
 }
 
@@ -335,20 +365,7 @@ fn rust_version() -> Option<String> {
         })
 }
 
-fn kernel_headers_present(kver: Option<&str>) -> bool {
-    let ver = kver.unwrap_or("");
-    if ver.is_empty() {
-        return false;
-    }
-    Path::new(&format!("/lib/modules/{ver}/build")).exists()
-}
-
-fn rust_for_linux_detected(kver: Option<&str>) -> bool {
-    let version = kver.unwrap_or("");
-    if version.is_empty() {
-        return false;
-    }
-
+fn r4l_detected(version: &str) -> bool {
     // Method 1: /proc/config.gz
     if let Ok(output) = Command::new("zgrep")
         .args(["CONFIG_RUST=y", "/proc/config.gz"])
@@ -381,115 +398,103 @@ fn rust_for_linux_detected(kver: Option<&str>) -> bool {
 
 fn detect_distro() -> Option<String> {
     let content = std::fs::read_to_string("/etc/os-release").ok()?;
-    let mut name: Option<String> = None;
-    let mut id: Option<String> = None;
-
     for line in content.lines() {
         if let Some(val) = line.strip_prefix("NAME=") {
-            name = Some(val.trim_matches('"').to_string());
-        }
-        if let Some(val) = line.strip_prefix("ID=") {
-            id = Some(val.trim_matches('"').to_string());
+            return Some(val.trim_matches('"').to_string());
         }
     }
-
-    name.or(id)
+    None
 }
 
-/// Map distro + kernel version to the correct header package install command.
-fn header_package_name(distro: Option<&str>, kver: Option<&str>) -> String {
-    let id = distro
-        .and_then(|d| {
-            let lower = d.to_lowercase();
-            if lower.contains("cachyos") {
-                Some("cachyos")
-            } else if lower.contains("arch") {
-                Some("arch")
-            } else if lower.contains("ubuntu") {
-                Some("ubuntu")
-            } else if lower.contains("debian") {
-                Some("debian")
-            } else if lower.contains("fedora") {
-                Some("fedora")
-            } else {
-                None
-            }
-        })
-        .unwrap_or("unknown");
+/// Parse the kernel release string to extract the variant suffix.
+///
+/// Examples:
+///   "6.18.35-1-cachyos-lts"  → "cachyos-lts"
+///   "6.12.10-arch1-1"        → "arch"
+///   "6.8.0-40-generic"       → "generic"
+///   "6.11.8-1-default"       → "default"
+fn kernel_variant(kver: Option<&str>) -> Option<String> {
+    let ver = kver?;
+    // Find the last dash-separated component that looks like a variant
+    let parts: Vec<&str> = ver.split('-').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    // Skip version and patch level, grab what's after
+    let variant_parts = &parts[2..];
+    if variant_parts.is_empty() {
+        return None;
+    }
+    Some(variant_parts.join("-"))
+}
 
-    // Build a map of known header packages for this distro
-    let mut headers: BTreeMap<&str, &str> = BTreeMap::new();
+/// Build the exact header package install command for the current system.
+fn header_package_command(distro: Option<&str>, kver: Option<&str>) -> String {
+    let distro_id = distro.map(|d| d.to_lowercase()).unwrap_or_default();
 
-    match id {
-        "cachyos" => {
-            let _ = headers.insert("cachyos", "pacman -S linux-cachyos-lts-headers");
-            let _ = headers.insert(
-                "cachyos-hardened",
-                "pacman -S linux-cachyos-hardened-headers",
-            );
-            let _ = headers.insert("cachyos-zen", "pacman -S linux-cachyos-zen-headers");
-        }
-        "arch" => {
-            let _ = headers.insert("arch", "pacman -S linux-headers");
-            let _ = headers.insert("arch-zen", "pacman -S linux-zen-headers");
-            let _ = headers.insert("arch-lts", "pacman -S linux-lts-headers");
-            let _ = headers.insert("arch-hardened", "pacman -S linux-hardened-headers");
-        }
-        "ubuntu" | "debian" => {
-            let _ = headers.insert("generic", "apt install linux-headers-$(uname -r)");
-        }
-        "fedora" => {
-            let _ = headers.insert("generic", "dnf install kernel-headers kernel-devel");
-        }
-        _ => {
-            let _ = headers.insert("generic", "install linux-headers for your distribution");
-        }
-    };
+    let variant = kernel_variant(kver);
 
-    // Try to match kernel version string to a specific variant
-    if let Some(ver) = kver {
-        if ver.contains("cachyos-hardened") {
-            return headers
-                .get("cachyos-hardened")
-                .unwrap_or(&"pacman -S linux-headers")
-                .to_string();
-        }
-        if ver.contains("cachyos-zen") {
-            return headers
-                .get("cachyos-zen")
-                .unwrap_or(&"pacman -S linux-headers")
-                .to_string();
-        }
-        if ver.contains("cachyos") {
-            return headers
-                .get("cachyos")
-                .unwrap_or(&"pacman -S linux-headers")
-                .to_string();
-        }
-        if ver.contains("zen") {
-            return headers
-                .get("arch-zen")
-                .unwrap_or(&"pacman -S linux-zen-headers")
-                .to_string();
-        }
-        if ver.contains("lts") {
-            return headers
-                .get("arch-lts")
-                .unwrap_or(&"pacman -S linux-lts-headers")
-                .to_string();
-        }
-        if ver.contains("hardened") {
-            return headers
-                .get("arch-hardened")
-                .unwrap_or(&"pacman -S linux-hardened-headers")
-                .to_string();
-        }
+    // Arch family (pacman)
+    if distro_id.contains("cachyos")
+        || distro_id.contains("arch")
+        || distro_id.contains("endeavouros")
+        || distro_id.contains("manjaro")
+        || distro_id.contains("artix")
+    {
+        let pkg = arch_header_package(&variant);
+        return format!("sudo pacman -S {pkg}");
     }
 
-    headers
-        .get(id)
-        .or_else(|| headers.get("generic"))
-        .copied()
-        .unwrap_or("install linux-headers for your distribution")
-        .to_string()
+    // Debian family (apt)
+    if distro_id.contains("ubuntu")
+        || distro_id.contains("debian")
+        || distro_id.contains("linux mint")
+        || distro_id.contains("pop")
+    {
+        return "sudo apt install linux-headers-$(uname -r)".into();
+    }
+
+    // Fedora family (dnf)
+    if distro_id.contains("fedora") {
+        return "sudo dnf install kernel-devel kernel-headers".into();
+    }
+
+    // openSUSE (zypper)
+    if distro_id.contains("suse") || distro_id.contains("opensuse") {
+        return "sudo zypper install kernel-default-devel".into();
+    }
+
+    // Alpine (apk)
+    if distro_id.contains("alpine") {
+        let pkg = alpine_header_package(&variant);
+        return format!("sudo apk add {pkg}");
+    }
+
+    // Generic fallback
+    "Install the kernel headers package for your distribution.".into()
+}
+
+fn arch_header_package(variant: &Option<String>) -> String {
+    match variant.as_deref() {
+        Some("cachyos-lts") => "linux-cachyos-lts-headers",
+        Some("cachyos-hardened") => "linux-cachyos-hardened-headers",
+        Some("cachyos-zen") => "linux-cachyos-zen-headers",
+        Some(v) if v.starts_with("cachyos") => "linux-cachyos-headers",
+        Some("zen") => "linux-zen-headers",
+        Some("lts") => "linux-lts-headers",
+        Some("hardened") => "linux-hardened-headers",
+        Some("rt") | Some("rt-lts") => "linux-rt-headers",
+        Some("arch") | Some("arch1") => "linux-headers",
+        _ => "linux-headers",
+    }
+    .to_string()
+}
+
+fn alpine_header_package(variant: &Option<String>) -> String {
+    match variant.as_deref() {
+        Some("lts") => "linux-lts-dev",
+        Some("virt") => "linux-virt-dev",
+        _ => "linux-lts-dev",
+    }
+    .to_string()
 }
