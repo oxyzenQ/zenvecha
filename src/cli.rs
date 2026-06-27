@@ -95,7 +95,7 @@ struct Doctor {
 struct Check {
     name: &'static str,
     passed: bool,
-    reason: Option<&'static str>,
+    reason: Option<String>,
 }
 
 impl Doctor {
@@ -158,7 +158,7 @@ impl Doctor {
             let mark = if c.passed { "[+]" } else { "[-]" };
             let _ = writeln!(out, "{mark} {}", c.name);
             if !c.passed
-                && let Some(reason) = c.reason
+                && let Some(ref reason) = c.reason
             {
                 let _ = writeln!(out, "    {reason}");
             }
@@ -221,7 +221,7 @@ impl Doctor {
                     name: "Kernel version",
                     passed: ok,
                     reason: if !ok {
-                        Some("Zenvecha requires Linux 6.x.")
+                        Some("Zenvecha requires Linux 6.x.".into())
                     } else {
                         None
                     },
@@ -232,7 +232,7 @@ impl Doctor {
                 self.checks.push(Check {
                     name: "Kernel version",
                     passed: false,
-                    reason: Some("Could not read /proc/version."),
+                    reason: Some("Could not read /proc/version.".into()),
                 });
                 false
             }
@@ -247,7 +247,7 @@ impl Doctor {
                     name: "CPU architecture",
                     passed: ok,
                     reason: if !ok {
-                        Some("Zenvecha requires x86_64.")
+                        Some("Zenvecha requires x86_64.".into())
                     } else {
                         None
                     },
@@ -258,7 +258,7 @@ impl Doctor {
                 self.checks.push(Check {
                     name: "CPU architecture",
                     passed: false,
-                    reason: Some("uname -m failed."),
+                    reason: Some("uname -m failed.".into()),
                 });
                 false
             }
@@ -281,7 +281,7 @@ impl Doctor {
                 self.checks.push(Check {
                     name: "Rust compiler",
                     passed: false,
-                    reason: Some("rustc is not in PATH."),
+                    reason: Some("rustc is not in PATH.".into()),
                 });
                 false
             }
@@ -289,9 +289,11 @@ impl Doctor {
     }
 
     fn check_headers(&mut self, distro: Option<&str>, kver: Option<&str>) -> bool {
-        let present = kver.is_some_and(|v| Path::new(&format!("/lib/modules/{v}/build")).exists());
+        let running = kver.unwrap_or("");
 
-        if present {
+        // 1. Headers match running kernel
+        let build_path = format!("/lib/modules/{running}/build");
+        if Path::new(&build_path).exists() {
             self.checks.push(Check {
                 name: "Kernel headers",
                 passed: true,
@@ -300,14 +302,28 @@ impl Doctor {
             return true;
         }
 
-        // Build exact header package command
+        // 2. Headers installed but for a different version
+        if let Some(installed_ver) = installed_header_version(running) {
+            let reason = format!(
+                "Headers installed for kernel {} but running {} — reboot required.",
+                installed_ver, running
+            );
+            self.checks.push(Check {
+                name: "Kernel headers",
+                passed: false,
+                reason: Some(reason),
+            });
+            return false;
+        }
+
+        // 3. No headers at all
         let pkg_cmd = header_package_command(distro, kver);
         self.fix_commands.push(pkg_cmd.clone());
 
         self.checks.push(Check {
             name: "Kernel headers",
             passed: false,
-            reason: Some("Missing kernel headers."),
+            reason: Some("Missing kernel headers.".into()),
         });
         false
     }
@@ -327,7 +343,7 @@ impl Doctor {
         self.checks.push(Check {
             name: "Rust-for-Linux",
             passed: false,
-            reason: Some("Boot a kernel built with CONFIG_RUST=y."),
+            reason: Some("CONFIG_RUST / CONFIG_RUST_IS_AVAILABLE not found.".into()),
         });
         false
     }
@@ -365,22 +381,32 @@ fn rust_version() -> Option<String> {
         })
 }
 
+/// Check for Rust kernel support using multiple config sources.
+///
+/// Newer kernels (6.7+) use `CONFIG_RUST_IS_AVAILABLE=y` instead of
+/// `CONFIG_RUST=y`. Older kernels use `CONFIG_RUST=y`. We check both.
 fn r4l_detected(version: &str) -> bool {
+    let rust_configs = ["CONFIG_RUST=y", "CONFIG_RUST_IS_AVAILABLE=y"];
+
     // Method 1: /proc/config.gz
-    if let Ok(output) = Command::new("zgrep")
-        .args(["CONFIG_RUST=y", "/proc/config.gz"])
-        .output()
-        && output.status.success()
-    {
-        return true;
+    for cfg in &rust_configs {
+        if let Ok(output) = Command::new("zgrep")
+            .args([*cfg, "/proc/config.gz"])
+            .output()
+            && output.status.success()
+        {
+            return true;
+        }
     }
 
     // Method 2: /boot/config-*
     let config_path = format!("/boot/config-{version}");
-    if let Ok(content) = std::fs::read_to_string(&config_path)
-        && content.contains("CONFIG_RUST=y")
-    {
-        return true;
+    if let Ok(content) = std::fs::read_to_string(&config_path) {
+        for cfg in &rust_configs {
+            if content.contains(cfg) {
+                return true;
+            }
+        }
     }
 
     // Method 3: kernel headers include/linux/rust.h
@@ -398,9 +424,39 @@ fn r4l_detected(version: &str) -> bool {
 
 fn detect_distro() -> Option<String> {
     let content = std::fs::read_to_string("/etc/os-release").ok()?;
+    let mut name: Option<String> = None;
+    let mut id: Option<String> = None;
+
     for line in content.lines() {
         if let Some(val) = line.strip_prefix("NAME=") {
-            return Some(val.trim_matches('"').to_string());
+            name = Some(val.trim_matches('"').to_string());
+        }
+        if let Some(val) = line.strip_prefix("ID=") {
+            id = Some(val.trim_matches('"').to_string());
+        }
+    }
+
+    // Prefer NAME; fall back to ID
+    name.or(id)
+}
+
+/// Find the latest installed kernel header version that differs from the
+/// running kernel. Returns None if no other headers are installed.
+fn installed_header_version(running: &str) -> Option<String> {
+    let modules = Path::new("/lib/modules");
+    if !modules.exists() {
+        return None;
+    }
+    let entries = std::fs::read_dir(modules).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == running {
+            continue;
+        }
+        let build = entry.path().join("build");
+        if build.exists() {
+            return Some(name.to_string());
         }
     }
     None
