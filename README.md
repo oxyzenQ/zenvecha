@@ -18,7 +18,13 @@
 
 ## Status
 
-**Research** — v0.0.1 Foundation phase. No kernel patching implemented.
+**Phase 1 — Kernel Foundation (v0.1.0)**
+
+First kernel module loads and unloads. No live patching yet.
+
+```bash
+zenvecha doctor   # Check system readiness
+```
 
 ---
 

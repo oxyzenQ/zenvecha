@@ -1,6 +1,6 @@
 [package]
 name = "zenvecha"
-version = "0.0.1"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
 description = "Zenvecha — Safe runtime patching for selected Linux desktop kernel fixes without requiring an immediate reboot."
@@ -15,7 +15,6 @@ categories = ["os", "command-line-utilities"]
 
 [workspace]
 members = [
-    "kernel",
     "userspace",
 ]
 
