@@ -197,18 +197,51 @@ impl Doctor {
     }
 
     fn print_fix_mode(&self, out: &mut io::StdoutLock<'_>) {
-        if self.fix_commands.is_empty() {
+        let failures: Vec<&Check> = self.checks.iter().filter(|c| !c.passed).collect();
+
+        if failures.is_empty() {
             let _ = writeln!(out, "All checks passed. Nothing to fix.");
             return;
         }
-        let _ = writeln!(out, "Would run");
+
+        // Show what's wrong
+        let _ = writeln!(out, "Detected issues");
         let _ = writeln!(out);
-        for cmd in &self.fix_commands {
-            let _ = writeln!(out, "  {cmd}");
+        for c in &failures {
+            let _ = writeln!(
+                out,
+                " {} — {}",
+                c.name,
+                c.reason.as_deref().unwrap_or("unknown")
+            );
         }
         let _ = writeln!(out);
-        let _ = writeln!(out, "No commands were executed.");
-        let _ = writeln!(out, "Run the commands above manually if you wish to fix.");
+
+        // Separates auto-fixable from manual
+        if !self.fix_commands.is_empty() {
+            let _ = writeln!(out, "Would run");
+            let _ = writeln!(out);
+            for cmd in &self.fix_commands {
+                let _ = writeln!(out, "  {cmd}");
+            }
+            let _ = writeln!(out);
+            let _ = writeln!(out, "No commands were executed.");
+            let _ = writeln!(out, "Run the commands above manually if you wish to fix.");
+        }
+
+        // Flag issues that require manual action (e.g. reboot)
+        let manual: Vec<&&Check> = failures
+            .iter()
+            .filter(|c| c.reason.as_deref().is_some_and(|r| r.contains("reboot")))
+            .collect();
+
+        if !manual.is_empty() {
+            let _ = writeln!(out, "Manual action required");
+            let _ = writeln!(out);
+            for c in manual {
+                let _ = writeln!(out, " {}", c.reason.as_deref().unwrap_or(""));
+            }
+        }
     }
 
     // -- individual checks --------------------------------------------------
@@ -305,8 +338,8 @@ impl Doctor {
         // 2. Headers installed but for a different version
         if let Some(installed_ver) = installed_header_version(running) {
             let reason = format!(
-                "Headers installed for kernel {} but running {} — reboot required.",
-                installed_ver, running
+                "Running kernel: {}\n    Installed headers: {}\n    Action: reboot to boot into {installed_ver}.",
+                running, installed_ver
             );
             self.checks.push(Check {
                 name: "Kernel headers",
