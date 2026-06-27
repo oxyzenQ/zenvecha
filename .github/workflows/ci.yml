@@ -99,4 +99,4 @@ jobs:
       - name: Check actionlint
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@latest
-          ~/go/bin/actionlint .github/workflows/
+          ~/go/bin/actionlint .github/workflows/*.yml
