@@ -200,6 +200,42 @@ pub fn collect_facts(ctx: &ReportContext) -> Vec<String> {
         facts.push(format!("Architecture: {arch}"));
     }
 
+    // Kernel vs headers status
+    if let (Some(r), Some(h)) = (
+        ctx.release.as_deref(),
+        ctx.mod_info.installed_header_version.as_deref(),
+    ) {
+        if r == h {
+            facts.push(format!("Running kernel matches installed headers ({r})"));
+        } else {
+            facts.push(format!("Running kernel: {r}"));
+            facts.push(format!("Installed headers: {h} (mismatch)"));
+        }
+    }
+
+    // Config source
+    if let Some(ref cfg) = ctx.config_text
+        && !cfg.is_empty()
+    {
+        facts.push("Kernel config available".into());
+    }
+
+    // Debug/Trace mount status
+    if ctx.debugfs_ok {
+        facts.push("debugfs mounted".into());
+    }
+    if ctx.tracefs_ok {
+        facts.push("tracefs mounted".into());
+    }
+
+    // Module compression from config
+    if ctx.abi_info.module_compression != "Unknown" {
+        facts.push(format!(
+            "Module compression: {}",
+            ctx.abi_info.module_compression
+        ));
+    }
+
     facts
 }
 

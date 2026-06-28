@@ -33,20 +33,7 @@ pub struct RecCtx<'a> {
 pub fn generate(ctx: &RecCtx) -> Vec<String> {
     let mut recs: Vec<String> = Vec::new();
 
-    // Toolchain
-    if !ctx.rustc_installed {
-        recs.push(
-            "Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".into(),
-        );
-    }
-    if !ctx.bindgen_installed {
-        recs.push("Install bindgen: cargo install bindgen-cli".into());
-    }
-    if !ctx.llvm_installed {
-        recs.push("Install LLVM/clang for kernel compilation".into());
-    }
-
-    // Headers
+    // Headers first — reboot is highest-impact fix
     if !ctx.headers_available {
         let mut needs_reboot = false;
         if let (Some(r), Some(h)) = (ctx.release, ctx.headers_ver)
@@ -69,6 +56,19 @@ pub fn generate(ctx: &RecCtx) -> Vec<String> {
         recs.push(
             "Install kernel source or create symlink from /lib/modules/$(uname -r)/source".into(),
         );
+    }
+
+    // Toolchain
+    if !ctx.rustc_installed {
+        recs.push(
+            "Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".into(),
+        );
+    }
+    if !ctx.bindgen_installed {
+        recs.push("Install bindgen: cargo install bindgen-cli".into());
+    }
+    if !ctx.llvm_installed {
+        recs.push("Install LLVM/clang for kernel compilation".into());
     }
 
     // Rust-for-Linux

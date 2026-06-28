@@ -125,7 +125,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let _ = writeln!(out, "  Loaded modules   : {}", loader.loaded_count);
     let _ = writeln!(
         out,
-        "  Signed supported : {}",
+        "  Signing support  : {}",
         if loader.signed_supported { "yes" } else { "no" }
     );
     let _ = writeln!(out, "  Compression      : {}", loader.compression);

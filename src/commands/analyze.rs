@@ -93,6 +93,19 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     print_path_kv(&mut out, "Build directory", bld.build_dir.as_deref());
     print_path_kv(&mut out, "Source directory", bld.source_dir.as_deref());
     let _ = writeln!(out, "  Header integrity    : {}", bld.header_status.label());
+    // Clarify: header integrity ≠ full kernel source
+    if bld.header_status.is_ready() && bld.source_dir.is_none() {
+        let _ = writeln!(
+            out,
+            "  Kernel source       : not installed (header tree only)"
+        );
+    } else if !bld.header_status.is_ready() {
+        let _ = writeln!(
+            out,
+            "  Kernel source       : {}",
+            bld.source_dir.as_deref().unwrap_or("not found")
+        );
+    }
     print_path_kv(&mut out, "Module.symvers", bld.module_symvers.as_deref());
     match bld.system_map.as_deref() {
         Some(p) => {
