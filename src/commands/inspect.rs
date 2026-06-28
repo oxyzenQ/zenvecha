@@ -1,213 +1,276 @@
 // Copyright (C) 2026 rezky_nightky
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Inspect command — read-only kernel capability discovery.
+//! Inspect command — kernel capability discovery.
+//!
+//! Orchestrates capability probes via Registry, renders results.
+//! No business logic in this file — all logic lives in core/ and system/.
 
 use std::io::{self, Write};
 
-use crate::system::{btf, config, kallsyms, kernel, modules, rust};
+use crate::core::capability::Registry;
+use crate::core::evidence::{Evidence, EvidenceValue};
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let reg = Registry::default();
+    let evidence = reg.run_all();
+
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    let release = kernel::kernel_release();
-    let arch = kernel::architecture();
-    let compiler = kernel::compiler_version();
-    let distro = kernel::detect_distro();
+    render(&evidence, &mut out)
+}
 
-    let (config_text, config_source) = config::read_kernel_config().unzip();
-    let config_text = config_text.as_deref();
-
-    let mod_info = modules::inspect_modules(config_text);
-    let ks_info = kallsyms::inspect_kallsyms();
-    let debug = btf::inspect_debug();
-    let (rust_cfg, rust_avail) = rust::rust_config(config_text);
+fn render(
+    evidence: &[Evidence],
+    out: &mut io::StdoutLock<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    writeln!(out, "Zenvecha Inspect")?;
+    writeln!(out)?;
 
     // Kernel identity
-    let _ = writeln!(out, "Zenvecha Inspect");
-    let _ = writeln!(out);
-    let _ = writeln!(out, "Kernel");
-    print_kv(&mut out, "  Version", release.as_deref());
-    print_kv(&mut out, "  Architecture", arch.as_deref());
-    print_kv(&mut out, "  Distribution", distro.as_deref());
-    if let Some(ref c) = compiler {
-        let _ = writeln!(out, "  Rust compiler : {c}");
-    } else {
-        let _ = writeln!(out, "  Rust compiler : not found");
+    writeln!(out, "Kernel")?;
+    print_kv(out, "  Version", &ev_s(evidence, "kernel.release"))?;
+    print_kv(out, "  Architecture", &ev_s(evidence, "kernel.arch"))?;
+    print_kv(out, "  Distribution", &ev_s(evidence, "kernel.distro"))?;
+    {
+        let rustc = ev_bool(evidence, "toolchain.rustc");
+        if rustc {
+            writeln!(out, "  Rust compiler : installed")?;
+        } else {
+            writeln!(out, "  Rust compiler : not found")?;
+        }
     }
-    let _ = writeln!(out);
+    writeln!(out)?;
 
     // Configuration
-    let _ = writeln!(out, "Configuration");
-    if let Some(ref src) = config_source {
-        let _ = writeln!(out, "  Source : {src}");
-    } else {
-        let _ = writeln!(out, "  Source : not available");
+    writeln!(out, "Configuration")?;
+    {
+        let src = ev_text_value(evidence, "config.source");
+        if let Some(s) = src {
+            writeln!(out, "  Source : {s}")?;
+        } else {
+            writeln!(out, "  Source : not available")?;
+        }
     }
-    let _ = writeln!(out);
+    writeln!(out)?;
 
     let cfg_keys = [
-        "MODULES",
-        "MODULE_SIG",
-        "KALLSYMS",
-        "KALLSYMS_ALL",
-        "BPF",
-        "DEBUG_INFO_BTF",
-        "RUST",
-        "RUST_IS_AVAILABLE",
-        "LIVEPATCH",
+        ("MODULES", "config.MODULES"),
+        ("MODULE_SIG", "config.MODULE_SIG"),
+        ("KALLSYMS", "config.KALLSYMS"),
+        ("KALLSYMS_ALL", "config.KALLSYMS_ALL"),
+        ("BPF", "config.BPF"),
+        ("DEBUG_INFO_BTF", "config.DEBUG_INFO_BTF"),
+        ("RUST", "config.RUST"),
+        ("RUST_IS_AVAILABLE", "config.RUST_IS_AVAILABLE"),
+        ("LIVEPATCH", "config.LIVEPATCH"),
     ];
-    for key in &cfg_keys {
-        let label = format!("  CONFIG_{key}");
-        let val = config_text.map_or(config::ConfigValue::Missing, |t| {
-            config::config_value(t, key)
-        });
-        let _ = writeln!(out, "  {label:.<36} {}", val.label(config_text.is_some()));
+    let cfg_available = ev_text_value(evidence, "config.source").is_some();
+    for (key, id) in &cfg_keys {
+        let val = ev_config_label(evidence, id, cfg_available);
+        writeln!(out, "  CONFIG_{key:.<30} {val}")?;
     }
-    let _ = writeln!(out);
+    writeln!(out)?;
 
     // Module environment
-    let _ = writeln!(out, "Module Environment");
-    print_kv(
-        &mut out,
-        "  Running kernel",
-        mod_info.running_kernel.as_deref(),
-    );
-    print_kv(
-        &mut out,
-        "  Installed headers",
-        mod_info.installed_header_version.as_deref(),
-    );
-    print_kv(
-        &mut out,
-        "  Modules directory",
-        mod_info.modules_dir.as_deref(),
-    );
-    print_bool(&mut out, "  Build directory", mod_info.build_dir_present);
-    print_bool(&mut out, "  Headers", mod_info.headers_available);
-    print_bool_opt(&mut out, "  Signing support", mod_info.signing_enabled);
-    print_bool(&mut out, "  Signing required", mod_info.signing_required);
-    let _ = writeln!(out);
+    writeln!(out, "Module Environment")?;
+    print_kv(out, "  Running kernel", &ev_s(evidence, "kernel.release"))?;
+    print_kv(out, "  Installed headers", &ev_s(evidence, "build.headers"))?;
+    {
+        let release = ev_s(evidence, "kernel.release");
+        if release != "Unknown" {
+            writeln!(out, "  Modules directory : /lib/modules/{release}")?;
+        } else {
+            writeln!(out, "  Modules directory : Unknown")?;
+        }
+    }
+    print_bool(
+        out,
+        "  Build directory",
+        ev_text_known(evidence, "build.dir"),
+    )?;
+    print_bool(
+        out,
+        "  Headers",
+        ev_status_is(evidence, "build.headers", "Complete"),
+    )?;
+    {
+        let sig = ev_bool(evidence, "config.MODULE_SIG");
+        if sig {
+            writeln!(out, "  Signing support : enabled")?;
+        } else {
+            writeln!(out, "  Signing support : disabled")?;
+        }
+    }
+    writeln!(out)?;
 
     // Debug information
-    let _ = writeln!(out, "Debug Information");
-    print_bool(&mut out, "  BTF", debug.btf_available);
-    print_bool(&mut out, "  DWARF", debug.dwarf_available);
-    let _ = writeln!(out);
+    writeln!(out, "Debug Information")?;
+    print_bool(out, "  BTF", ev_bool(evidence, "debug.btf"))?;
+    print_bool(out, "  DWARF", ev_bool(evidence, "debug.dwarf"))?;
+    writeln!(out)?;
 
     // Symbol information
-    let _ = writeln!(out, "Symbol Information");
-    if ks_info.exists {
-        let label = "  /proc/kallsyms";
-        match (ks_info.readable, ks_info.root_only) {
-            (true, true) => {
-                let _ = writeln!(out, "{label} : present, readable (root only)");
-            }
-            (true, false) => {
-                let _ = writeln!(out, "{label} : present, readable");
-            }
-            (false, _) => {
-                let _ = writeln!(out, "{label} : present, permission denied");
-            }
+    writeln!(out, "Symbol Information")?;
+    let ks = ev_status_value(evidence, "symbols.kallsyms");
+    match ks.as_deref() {
+        Some("readable") => writeln!(out, "  /proc/kallsyms : present, readable")?,
+        Some("readable (root)") => {
+            writeln!(out, "  /proc/kallsyms : present, readable (root only)")?
         }
-    } else {
-        let _ = writeln!(out, "  /proc/kallsyms : not found");
+        Some("permission denied") => {
+            writeln!(out, "  /proc/kallsyms : present, permission denied")?
+        }
+        _ => writeln!(out, "  /proc/kallsyms : not found")?,
     }
-    let _ = writeln!(out);
+    writeln!(out)?;
 
-    // Capability summary — capabilities are about kernel config, not dev env
-    let r4l_ok = rust_cfg.is_enabled() && rust_avail.is_enabled();
-    let r4l_known = rust_cfg.is_known() || rust_avail.is_known();
+    // Capability summary
+    writeln!(out, "Kernel Capability Summary")?;
+    writeln!(out)?;
 
-    let mod_support = config_text
-        .map(|t| config::config_value(t, "MODULES").is_enabled())
-        .unwrap_or(false);
+    let r4l_ok = ev_bool(evidence, "config.RUST") || ev_bool(evidence, "config.RUST_IS_AVAILABLE");
+    let r4l_known = ev_config_known(evidence, "config.RUST")
+        || ev_config_known(evidence, "config.RUST_IS_AVAILABLE");
+    let mod_support = ev_bool(evidence, "config.MODULES");
+    let modsig_ok = ev_bool(evidence, "config.MODULE_SIG");
+    let modsig_known = ev_config_known(evidence, "config.MODULE_SIG");
+    let btf_ok = ev_bool(evidence, "config.DEBUG_INFO_BTF") && ev_bool(evidence, "debug.btf");
+    let btf_known = ev_config_known(evidence, "config.DEBUG_INFO_BTF");
+    let lp_ok = ev_bool(evidence, "config.LIVEPATCH");
+    let lp_known = ev_config_known(evidence, "config.LIVEPATCH");
+    let ks_ok = ev_status_is(evidence, "symbols.kallsyms", "readable")
+        || ev_status_is(evidence, "symbols.kallsyms", "readable (root)");
 
-    let modsig_ok = mod_info.signing_enabled == Some(true);
-    let modsig_known = mod_info.signing_enabled.is_some();
+    print_tri(out, "Rust for Linux", r4l_ok, r4l_known)?;
+    print_tri(out, "Modules", mod_support, mod_support)?;
+    print_tri(out, "Module Signing", modsig_ok, modsig_known)?;
+    print_tri(out, "BTF", btf_ok, btf_known)?;
+    print_tri(out, "Livepatch", lp_ok, lp_known)?;
+    print_tri(out, "Kallsyms", ks_ok, true)?;
+    writeln!(out)?;
 
-    let btf_ok = config_text
-        .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_enabled())
-        .unwrap_or(false)
-        && debug.btf_available;
-    let btf_known = config_text
-        .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_known())
-        .unwrap_or(false);
-
-    let lp_ok = config_text
-        .map(|t| config::config_value(t, "LIVEPATCH").is_enabled())
-        .unwrap_or(false);
-    let lp_known = config_text
-        .map(|t| config::config_value(t, "LIVEPATCH").is_known())
-        .unwrap_or(false);
-
-    let ks_ok = ks_info.exists && ks_info.readable;
-
-    let _ = writeln!(out, "Kernel Capability Summary");
-    let _ = writeln!(out);
-    print_tri(&mut out, "Rust for Linux", r4l_ok, r4l_known);
-    print_tri(&mut out, "Modules", mod_support, mod_support);
-    print_tri(&mut out, "Module Signing", modsig_ok, modsig_known);
-    print_tri(&mut out, "BTF", btf_ok, btf_known);
-    print_tri(&mut out, "Livepatch", lp_ok, lp_known);
-    print_tri(&mut out, "Kallsyms", ks_ok, true);
-    let _ = writeln!(out);
-
-    // "Suitable for" depends on dev environment, not just kernel capability
-    let mod_dev_ok = mod_support && mod_info.headers_available && kernel::compiler_available();
-    let _ = writeln!(out, "Suitable for:");
-    print_check(&mut out, "module development", mod_dev_ok);
-    print_check(&mut out, "symbol analysis", ks_ok);
-    print_check(&mut out, "live patching", lp_ok && ks_ok && mod_support);
+    // Suitable for
+    let mod_dev_ok = mod_support
+        && ev_status_is(evidence, "build.headers", "Complete")
+        && ev_bool(evidence, "toolchain.gcc");
+    writeln!(out, "Suitable for:")?;
+    print_check(out, "module development", mod_dev_ok)?;
+    print_check(out, "symbol analysis", ks_ok)?;
+    print_check(out, "live patching", lp_ok && ks_ok && mod_support)?;
 
     Ok(())
 }
 
-fn print_kv(out: &mut io::StdoutLock<'_>, label: &str, value: Option<&str>) {
-    match value {
-        Some(v) if !v.is_empty() => {
-            let _ = writeln!(out, "{label} : {v}");
-        }
-        _ => {
-            let _ = writeln!(out, "{label} : Unknown");
-        }
+/* helpers */
+
+fn ev_s(evidence: &[Evidence], id: &str) -> String {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .map_or_else(|| "Unknown".into(), |e| e.value.display())
+}
+
+fn ev_bool(evidence: &[Evidence], id: &str) -> bool {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .is_some_and(|e| match &e.value {
+            EvidenceValue::Bool(b) => *b,
+            EvidenceValue::Config(cv) => cv.is_enabled(),
+            EvidenceValue::Count(n) => *n > 0,
+            _ => false,
+        })
+}
+
+fn ev_config_known(evidence: &[Evidence], id: &str) -> bool {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .is_some_and(|e| match &e.value {
+            EvidenceValue::Config(cv) => cv.is_known(),
+            _ => false,
+        })
+}
+
+fn ev_config_label(evidence: &[Evidence], id: &str, cfg_available: bool) -> String {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .map_or("Unknown".into(), |e| match &e.value {
+            EvidenceValue::Config(cv) => cv.label(cfg_available).to_string(),
+            v => v.display(),
+        })
+}
+
+fn ev_text_value(evidence: &[Evidence], id: &str) -> Option<String> {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .and_then(|e| match &e.value {
+            EvidenceValue::Text(Some(s)) => Some(s.clone()),
+            EvidenceValue::Literal(s) => Some(s.clone()),
+            _ => None,
+        })
+}
+
+fn ev_text_known(evidence: &[Evidence], id: &str) -> bool {
+    evidence.iter().find(|e| e.id == id).is_some_and(|e| {
+        matches!(
+            &e.value,
+            EvidenceValue::Text(Some(_)) | EvidenceValue::Path(Some(_))
+        )
+    })
+}
+
+fn ev_status_is(evidence: &[Evidence], id: &str, expected: &str) -> bool {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .is_some_and(|e| match &e.value {
+            EvidenceValue::Status(s) => *s == expected,
+            _ => false,
+        })
+}
+
+fn ev_status_value(evidence: &[Evidence], id: &str) -> Option<String> {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .and_then(|e| match &e.value {
+            EvidenceValue::Status(s) => Some(s.to_string()),
+            _ => None,
+        })
+}
+
+fn print_kv(out: &mut io::StdoutLock<'_>, label: &str, value: &str) -> io::Result<()> {
+    if value == "Unknown" || value.is_empty() {
+        writeln!(out, "{label} : Unknown")
+    } else {
+        writeln!(out, "{label} : {value}")
     }
 }
 
-fn print_bool(out: &mut io::StdoutLock<'_>, label: &str, val: bool) {
-    let _ = writeln!(
+fn print_bool(out: &mut io::StdoutLock<'_>, label: &str, val: bool) -> io::Result<()> {
+    writeln!(
         out,
         "{label} : {}",
         if val { "present" } else { "not present" }
-    );
+    )
 }
 
-fn print_bool_opt(out: &mut io::StdoutLock<'_>, label: &str, val: Option<bool>) {
-    match val {
-        Some(true) => {
-            let _ = writeln!(out, "{label} : enabled");
-        }
-        Some(false) => {
-            let _ = writeln!(out, "{label} : disabled");
-        }
-        None => {
-            let _ = writeln!(out, "{label} : Unknown");
-        }
-    }
-}
-
-fn print_check(out: &mut io::StdoutLock<'_>, label: &str, ok: bool) {
+fn print_check(out: &mut io::StdoutLock<'_>, label: &str, ok: bool) -> io::Result<()> {
     let mark = if ok { "✔" } else { "✘" };
-    let _ = writeln!(out, "  {mark} {label}");
+    writeln!(out, "  {mark} {label}")
 }
 
-fn print_tri(out: &mut io::StdoutLock<'_>, label: &str, ok: bool, known: bool) {
+fn print_tri(out: &mut io::StdoutLock<'_>, label: &str, ok: bool, known: bool) -> io::Result<()> {
     if !known {
-        let _ = writeln!(out, "  ? {label}");
+        writeln!(out, "  ? {label}")
     } else if ok {
-        let _ = writeln!(out, "  ✔ {label}");
+        writeln!(out, "  ✔ {label}")
     } else {
-        let _ = writeln!(out, "  ✘ {label}");
+        writeln!(out, "  ✘ {label}")
     }
 }

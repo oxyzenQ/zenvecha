@@ -23,8 +23,7 @@ pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {
         "-V" | "--version" => print_version(),
         "--check-update" => check_update()?,
         "doctor" => {
-            let fix_mode = args.get(2).map(|s| s.as_str()) == Some("--fix");
-            crate::commands::doctor::Doctor::new().run(fix_mode)?;
+            crate::commands::doctor::run(&args)?;
         }
         "inspect" => crate::commands::inspect::run()?,
         "analyze" => crate::commands::analyze::run()?,

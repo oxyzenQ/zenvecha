@@ -233,7 +233,7 @@ pub fn collect_facts(ctx: &ReportContext) -> Vec<String> {
 
 // ---- helpers ---------------------------------------------------------------
 
-fn human_size(bytes: u64) -> String {
+pub(crate) fn human_size(bytes: u64) -> String {
     if bytes >= 1_048_576 {
         format!("{:.1} MB", bytes as f64 / 1_048_576.0)
     } else if bytes >= 1024 {

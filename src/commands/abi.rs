@@ -1,269 +1,179 @@
 // Copyright (C) 2026 rezky_nightky
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! ABI command — kernel compatibility intelligence.
+//! ABI command — kernel ABI & compatibility intelligence.
 //!
-//! Analyzes ABI, symbols, compiler compatibility, and module loader.
-//! Read-only, streaming, never loads large files into memory.
+//! Thin orchestrator — all data from Registry, rendering only.
 
 use std::io::{self, Write};
 
-use crate::system::{
-    abi, compiler, config, kernel, moduleinfo, modules, recommend, scoring, symbols, toolchain,
-};
+use crate::core::capability::Registry;
+use crate::core::evidence::{Evidence, EvidenceValue};
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let reg = Registry::default();
+    let evidence = reg.run_all();
+
     let stdout = io::stdout();
     let mut out = stdout.lock();
+    render(&evidence, &mut out)
+}
 
-    let release = kernel::kernel_release();
-    let tools = toolchain::inspect_toolchain();
-    let (config_text, _) = config::read_kernel_config().unzip();
-    let cfg = config_text.as_deref();
-
-    let abi_info = abi::inspect_abi(cfg);
-    let sym_info = symbols::inspect_symbols(release.as_deref());
-    let comp_abi = compiler::compare_compilers(&tools.rustc);
-    let mod_info = modules::inspect_modules(cfg);
-    let loader = moduleinfo::inspect_loader(cfg);
-
-    // ---- Kernel ABI -------------------------------------------------------
-
-    let _ = writeln!(out, "Zenvecha ABI");
-    let _ = writeln!(out);
-    let _ = writeln!(out, "Kernel ABI");
-    print_kv(&mut out, "  utsrelease", abi_info.utsrelease.as_deref());
-    print_kv(&mut out, "  vermagic", abi_info.vermagic.as_deref());
-    if let Some(ref layout) = abi_info.module_layout_version {
-        let _ = writeln!(out, "  module layout version : present");
-        let _ = writeln!(out, "    {layout}");
+fn render(
+    evidence: &[Evidence],
+    out: &mut io::StdoutLock<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Utsrelease
+    let abi = ev_text_value(evidence, "abi.info");
+    let (uts, vermagic, layout, compression) = if let Some(ref a) = abi {
+        (
+            field(a, "utsrelease="),
+            field(a, "vermagic="),
+            field(a, "layout="),
+            field(a, "compression="),
+        )
     } else {
-        let _ = writeln!(out, "  module layout version : not available");
-    }
-    print_kv(
-        &mut out,
-        "  compiler string",
-        abi_info.compiler_string.as_deref(),
-    );
-    let _ = writeln!(
+        (None, None, None, None)
+    };
+
+    writeln!(out, "Kernel ABI")?;
+    writeln!(out)?;
+    writeln!(
         out,
-        "  module compression  : {}",
-        abi_info.module_compression
-    );
-    let _ = writeln!(out, "  module signing      : {}", abi_info.module_signing);
-    let _ = writeln!(out);
-
-    // ---- System.map -------------------------------------------------------
-
-    let _ = writeln!(out, "System.map");
-    match &sym_info.system_map_path {
-        Some(p) => {
-            let _ = writeln!(out, "  Path   : {p}");
-            if let Some(sz) = sym_info.system_map_size {
-                let _ = writeln!(out, "  Size   : {}", human_size(sz));
-            }
-            let _ = writeln!(out, "  Status : available");
-        }
-        None => {
-            let _ = writeln!(out, "  Status : not installed (optional)");
-        }
-    }
-    let _ = writeln!(out);
-
-    // ---- Module.symvers ---------------------------------------------------
-
-    let _ = writeln!(out, "Module.symvers (running kernel)");
-    match &sym_info.module_symvers_path {
-        Some(p) => {
-            let _ = writeln!(out, "  Path          : {p}");
-            if let Some(n) = sym_info.symvers_crc_count {
-                let _ = writeln!(out, "  CRC count     : {n}");
-            }
-            if let Some(sz) = sym_info.symvers_size {
-                let _ = writeln!(out, "  File size     : {}", human_size(sz));
-            }
-            if let Some(ref ts) = sym_info.symvers_modified {
-                let _ = writeln!(out, "  Last modified : {ts}");
-            }
-        }
-        None => {
-            let _ = writeln!(out, "  Status : not found");
-        }
-    }
-    let _ = writeln!(out);
-
-    // ---- Kernel Symbols ---------------------------------------------------
-
-    let _ = writeln!(out, "Kernel Symbols");
-    let _ = writeln!(
+        "  Utsrelease : {}",
+        uts.as_deref().unwrap_or("Unknown")
+    )?;
+    writeln!(
         out,
-        "  /proc/kallsyms : {}",
-        sym_info.kallsyms_status.label()
-    );
-    if let Some(n) = sym_info.symbol_count {
-        let _ = writeln!(out, "  Symbol count   : {n}");
-    }
-    let _ = writeln!(out);
+        "  Vermagic   : {}",
+        vermagic.as_deref().unwrap_or("Unknown")
+    )?;
+    writeln!(
+        out,
+        "  Module layout : {}",
+        layout.as_deref().unwrap_or("Unknown")
+    )?;
+    writeln!(out)?;
 
-    // ---- VMLinux ---------------------------------------------------------
-
-    if let Some(ref vml) = sym_info.vmlinux_path {
-        let _ = writeln!(out, "VMLinux");
-        let _ = writeln!(out, "  Path     : {vml}");
-        if let Some(sz) = sym_info.vmlinux_size {
-            let _ = writeln!(out, "  Size     : {}", human_size(sz));
-        }
-        if let Some(ref bid) = sym_info.vmlinux_build_id {
-            let _ = writeln!(out, "  Build ID : {bid}");
-        }
-        let _ = writeln!(out);
-    }
-
-    // ---- Module Loader ----------------------------------------------------
-
-    let _ = writeln!(out, "Module Loader");
-    let _ = writeln!(out, "  Loaded modules   : {}", loader.loaded_count);
-    let _ = writeln!(
+    writeln!(out, "Module Loader")?;
+    writeln!(
         out,
         "  Signing support  : {}",
-        if loader.signed_supported { "yes" } else { "no" }
-    );
-    let _ = writeln!(out, "  Compression      : {}", loader.compression);
-    let _ = writeln!(
+        if ev_bool(evidence, "config.MODULE_SIG") {
+            "yes"
+        } else {
+            "no"
+        }
+    )?;
+    writeln!(
+        out,
+        "  Compression      : {}",
+        compression.as_deref().unwrap_or("Unknown")
+    )?;
+    writeln!(
         out,
         "  Livepatch        : {}",
-        if loader.livepatch_enabled {
+        if ev_bool(evidence, "config.LIVEPATCH") {
             "enabled"
         } else {
-            "not enabled"
+            "disabled"
         }
-    );
-    let _ = writeln!(out);
+    )?;
+    writeln!(out)?;
 
-    // ---- Compiler ABI -----------------------------------------------------
-
-    let _ = writeln!(out, "Compiler ABI");
-    print_kv(
-        &mut out,
-        "  Kernel compiler",
-        comp_abi.kernel_compiler.as_deref(),
-    );
-    print_kv(
-        &mut out,
-        "  Installed gcc",
-        comp_abi.installed_gcc.as_deref(),
-    );
-    print_kv(
-        &mut out,
-        "  Installed clang",
-        comp_abi.installed_clang.as_deref(),
-    );
-    print_kv(
-        &mut out,
-        "  Installed rustc",
-        comp_abi.installed_rustc.as_deref(),
-    );
-    let _ = writeln!(
-        out,
-        "  gcc compatibility   : {}",
-        comp_abi.gcc_compat.label()
-    );
-    let _ = writeln!(
-        out,
-        "  clang compatibility : {}",
-        comp_abi.clang_compat.label()
-    );
-    let _ = writeln!(
-        out,
-        "  rustc compatibility : {}",
-        comp_abi.rustc_compat.label()
-    );
-    let _ = writeln!(out);
-
-    // ---- Star Score -------------------------------------------------------
-
-    let scores = scoring::compute();
-    let _ = writeln!(out, "Compatibility Summary");
-    let _ = writeln!(out);
-    for s in &scores {
-        let _ = writeln!(out, "  {}  {}", s.render(), s.name);
+    // Module.symvers
+    writeln!(out, "Module.symvers (running kernel)")?;
+    match ev_text_value(evidence, "symbols.symvers") {
+        Some(p) => writeln!(out, "  Path : {p}")?,
+        None => writeln!(out, "  Status : not found")?,
     }
-    let _ = writeln!(out);
-    let _ = writeln!(out, "  Overall : {}", scoring::overall_rating(&scores));
-    let _ = writeln!(out);
+    writeln!(out)?;
 
-    // ---- Recommendations --------------------------------------------------
-
-    let recs = recommend::generate(&recommend::RecCtx {
-        rustc_installed: tools.rustc.is_some(),
-        bindgen_installed: tools.bindgen.is_some(),
-        llvm_installed: tools.llvm_version.is_some(),
-        headers_available: mod_info.headers_available,
-        build_dir_present: true, // ABI doesn't strictly need build dir
-        source_dir_present: sym_info.system_map_path.is_some(),
-        config_rust: cfg.map_or(config::ConfigValue::Missing, |t| {
-            config::config_value(t, "RUST")
-        }),
-        config_rust_available: cfg.map_or(config::ConfigValue::Missing, |t| {
-            config::config_value(t, "RUST_IS_AVAILABLE")
-        }),
-        config_modules: cfg.map_or(config::ConfigValue::Missing, |t| {
-            config::config_value(t, "MODULES")
-        }),
-        config_btf: cfg.map_or(config::ConfigValue::Missing, |t| {
-            config::config_value(t, "DEBUG_INFO_BTF")
-        }),
-        btf_available: true, // not critical for ABI
-        signing_required: mod_info.signing_required,
-        signing_enabled: mod_info.signing_enabled == Some(true),
-        debugfs_ok: mount_ok("/sys/kernel/debug"),
-        tracefs_ok: mount_ok("/sys/kernel/tracing"),
-        release: release.as_deref(),
-        headers_ver: mod_info.installed_header_version.as_deref(),
-    });
-
-    if !recs.is_empty() {
-        let _ = writeln!(out, "Recommendations");
-        let _ = writeln!(out);
-        for (i, r) in recs.iter().enumerate() {
-            let _ = writeln!(out, "  {}. {r}", i + 1);
+    // Kernel Symbols
+    writeln!(out, "Kernel Symbols")?;
+    writeln!(out, "  Total : {}", ev_s(evidence, "symbols.count"))?;
+    let ks = ev_status_value(evidence, "symbols.kallsyms");
+    match ks.as_deref() {
+        Some("readable") | Some("readable (root)") => {
+            writeln!(out, "  Source : /proc/kallsyms (readable)")?
         }
+        Some("permission denied") => {
+            writeln!(out, "  Source : /proc/kallsyms (permission denied)")?
+        }
+        Some("hidden") => writeln!(out, "  Source : hidden")?,
+        _ => writeln!(out, "  Source : not available")?,
     }
+    writeln!(out)?;
+
+    // VMLinux
+    writeln!(out, "VMLinux")?;
+    match ev_text_value(evidence, "symbols.vmlinux") {
+        Some(v) => writeln!(out, "  Info : {v}")?,
+        None => writeln!(out, "  Status : not found")?,
+    }
+    writeln!(out)?;
+
+    // Compiler ABI
+    writeln!(out, "Compiler ABI")?;
+    let comp = ev_text_value(evidence, "compiler.abi").unwrap_or_else(|| "Unknown".into());
+    writeln!(out, "  Kernel compiler  : {comp}")?;
+    let conf = ev_confidence(evidence, "compiler.abi");
+    writeln!(out, "  Confidence       : {}", conf)?;
+    writeln!(out)?;
 
     Ok(())
 }
 
-// ---- helpers ---------------------------------------------------------------
+/* helpers */
 
-fn print_kv(out: &mut io::StdoutLock<'_>, label: &str, value: Option<&str>) {
-    match value {
-        Some(v) if !v.is_empty() => {
-            let _ = writeln!(out, "{label} : {v}");
-        }
-        _ => {
-            let _ = writeln!(out, "{label} : Unknown");
-        }
-    }
+fn field(data: &str, prefix: &str) -> Option<String> {
+    data.split_whitespace()
+        .find(|p| p.starts_with(prefix))
+        .map(|p| p.strip_prefix(prefix).unwrap_or(p).to_string())
 }
 
-fn mount_ok(path: &str) -> bool {
-    if let Ok(content) = std::fs::read_to_string("/proc/mounts") {
-        for line in content.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 2 && parts[1] == path {
-                return true;
-            }
-        }
-    }
-    false
+fn ev_s(evidence: &[Evidence], id: &str) -> String {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .map_or_else(|| "Unknown".into(), |e| e.value.display())
 }
 
-fn human_size(bytes: u64) -> String {
-    if bytes >= 1_048_576 {
-        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
-    } else if bytes >= 1024 {
-        format!("{:.1} KB", bytes as f64 / 1024.0)
-    } else {
-        format!("{bytes} B")
-    }
+fn ev_bool(evidence: &[Evidence], id: &str) -> bool {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .is_some_and(|e| match &e.value {
+            EvidenceValue::Bool(b) => *b,
+            EvidenceValue::Config(cv) => cv.is_enabled(),
+            _ => false,
+        })
+}
+
+fn ev_text_value(evidence: &[Evidence], id: &str) -> Option<String> {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .and_then(|e| match &e.value {
+            EvidenceValue::Text(Some(s)) => Some(s.clone()),
+            EvidenceValue::Literal(s) => Some(s.clone()),
+            _ => None,
+        })
+}
+
+fn ev_status_value(evidence: &[Evidence], id: &str) -> Option<String> {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .and_then(|e| match &e.value {
+            EvidenceValue::Status(s) => Some(s.to_string()),
+            _ => None,
+        })
+}
+
+fn ev_confidence(evidence: &[Evidence], id: &str) -> &'static str {
+    evidence
+        .iter()
+        .find(|e| e.id == id)
+        .map_or("low", |e| e.confidence.label())
 }

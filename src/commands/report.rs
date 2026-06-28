@@ -3,25 +3,27 @@
 
 //! Report command — unified kernel intelligence report.
 //!
-//! Gathers all inspections once, then formats in human, compact, or JSON mode.
+//! Thin orchestrator. All data from Registry, all rendering from core.
 
-use crate::system::{formatter, json, report};
+use crate::core::capability::Registry;
+use crate::core::rendering;
 
 pub fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
     let compact = args.iter().any(|a| a == "--compact");
     let json_mode = args.iter().any(|a| a == "--json");
 
-    let ctx = report::gather();
+    let reg = Registry::default();
+    let evidence = reg.run_all();
 
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
 
     if json_mode {
-        json::write_json(&ctx, &mut out)?;
+        rendering::render_json(&evidence, &mut out)?;
     } else if compact {
-        formatter::write_compact(&ctx, &mut out)?;
+        rendering::render_compact(&evidence, &mut out)?;
     } else {
-        formatter::write_human(&ctx, &mut out)?;
+        rendering::render_human(&evidence, &mut out)?;
     }
 
     Ok(())
