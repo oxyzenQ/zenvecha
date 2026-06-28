@@ -18,12 +18,13 @@
 
 ## Status
 
-**Phase 1 — Kernel Foundation (v0.1.0)**
+**Phase 2 — Kernel Capability Discovery (v0.2.0)**
 
-First kernel module loads and unloads. No live patching yet.
+Read-only kernel inspection. No patching, no modification.
 
 ```bash
 zenvecha doctor   # Check system readiness
+zenvecha inspect  # Kernel capability discovery
 ```
 
 ---

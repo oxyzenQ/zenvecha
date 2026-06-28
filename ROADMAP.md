@@ -4,28 +4,41 @@
 
 ---
 
-## Phase 0 — Foundation
+## Phase 1 — System Readiness
 
-### v0.0.1 "Genesis"
+### v0.1.0 "Doctor"
 - [x] Repository structure
 - [x] Rust workspace
 - [x] CI/CD pipelines
 - [x] Documentation framework
 - [x] Build system
-- [ ] Architecture design docs
-- [ ] No patching yet
+- [x] `zenvecha doctor` — system readiness check
+- [x] `zenvecha doctor --fix` — actionable remediation
+- [x] Gatekeeper: fmt, clippy, build, test, codespell, audit, deny
 
-### v0.0.2 "Kernel Hello"
-- [ ] Rust kernel module (`insmod zenvecha.ko`)
-- [ ] Clean module unload
-- [ ] Kernel logging integration
+### v0.2.0 "Inspect"
+- [x] `zenvecha inspect` — kernel capability discovery
+- [x] Kernel version, architecture, compiler detection
+- [x] CONFIG_* parsing from /boot/config-* and /proc/config.gz
+- [x] Module environment (signing, headers, build dir)
+- [x] Debug information (BTF, DWARF)
+- [x] Symbol table accessibility (/proc/kallsyms)
+- [x] Rust-for-Linux support detection
+- [x] Capability summary with ✔/✘ indicators
+- [x] Modular architecture: commands/, system/
+- [x] No unsafe code
+- [x] Zero new crate dependencies
 
-### v0.0.3 "Symbol Discovery"
+---
+
+## Phase 2 — Soft Live Patching
+
+### v0.3 "Symbol Discovery"
 - [ ] Runtime symbol lookup (kallsyms)
 - [ ] Discover symbols: `schedule`, `do_exit`, `printk`
 - [ ] Read-only — no modifications
 
-### v0.0.4 "Safe Inspection"
+### v0.4 "Safe Inspection"
 - [ ] Read symbol metadata
 - [ ] Read kernel version info
 - [ ] Verify kernel ABI compatibility
@@ -33,29 +46,29 @@
 
 ---
 
-## Phase 1 — First Runtime Change
+## Phase 3 — First Runtime Change
 
-### v0.1.0 "First Hook"
+### v0.5 "First Hook"
 - [ ] Hook a dummy function
 - [ ] Redirect to replacement
 - [ ] Verify behavior change
 - [ ] **Claim:** Runtime Function Redirection (Experimental)
 
-### v0.2 "Safety Net"
+### v0.6 "Safety Net"
 - [ ] Manual rollback command
 - [ ] Patch validation
 - [ ] Checksum verification
 
-### v0.3 "Patch Format"
+### v0.7 "Patch Format"
 - [ ] `.zenv` patch package format
 - [ ] Patch metadata (target, version, checksum)
 - [ ] Patch loading/parsing
 
 ---
 
-## Phase 2 — Soft Live Patching
+## Phase 3 — Soft Live Patching
 
-### v0.4 "Soft Live Patch"
+### v0.8 "Soft Live Patch"
 - [ ] Patch helper functions
 - [ ] Patch small bug fixes
 - [ ] Patch simple logic
@@ -73,15 +86,15 @@
 
 ---
 
-## Phase 3 — Desktop Edition
+## Phase 4 — Desktop Edition
 
-### v0.7 "Desktop Support"
+### v1.0 "Desktop Support"
 - [ ] Arch Linux official support
 - [ ] CachyOS official support
 - [ ] Kernel 6.x LTS
 - [ ] x86_64 only
 
-### v0.8 "Stress Testing"
+### v1.1 "Stress Testing"
 - [ ] Firefox runtime test
 - [ ] Docker runtime test
 - [ ] QEMU runtime test
@@ -90,16 +103,16 @@
 - [ ] Suspend/resume test
 - [ ] Target: 7-day uptime
 
-### v0.9 "Community Preview"
+### v1.2 "Community Preview"
 - [ ] Public experimental release
 - [ ] Community testing
 - [ ] Bug reports and feedback
 
 ---
 
-## Phase 4 — Zenvecha 1.0
+## Phase 5 — Zenvecha 1.x
 
-### v1.0 "Stable Desktop"
+### v1.5 "Stable Desktop"
 - [ ] **Claim:** Safe runtime patching for selected Linux desktop kernel fixes without requiring an immediate reboot
 - [ ] Stable API
 - [ ] Comprehensive tests
@@ -108,7 +121,7 @@
 
 ---
 
-## Phase 5 — Security
+## Phase 6 — Security
 
 ### v1.5 "Extended Support"
 - [ ] More kernel functions
@@ -123,7 +136,7 @@
 
 ---
 
-## Phase 6 — Advanced
+## Phase 7 — Advanced
 
 ### v3.0 "Component Replacement"
 - [ ] Live kernel component research
@@ -132,7 +145,7 @@
 
 ---
 
-## Phase 7 — Future
+## Phase 8 — Future
 
 ### Zenvecha X
 - [ ] No-reboot kernel evolution research
@@ -145,10 +158,12 @@
 
 | Version | Claim |
 |---------|-------|
-| v0.1    | Runtime function redirection |
-| v0.4    | Experimental live patching |
-| v0.7    | Reduce unnecessary reboots |
-| v1.0    | Safe runtime desktop kernel patching |
+| v0.1    | System readiness check (doctor) |
+| v0.2    | Kernel capability discovery (inspect) |
+| v0.5    | Runtime function redirection |
+| v0.8    | Experimental live patching |
+| v1.0    | Desktop support |
+| v1.5    | Safe runtime desktop kernel patching |
 | v2.0    | Live security patching |
 | v3.0+   | Towards reboot-less desktop maintenance |
 

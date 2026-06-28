@@ -48,8 +48,37 @@ fn test_doctor_fix_mode() {
     if let Some(o) = output {
         let stdout = String::from_utf8_lossy(&o.stdout);
         assert!(stdout.contains("Zenvecha Doctor"));
-        assert!(stdout.contains("Would run"));
+        assert!(stdout.contains("Detected issues"));
         assert!(stdout.contains("No commands were executed"));
+    }
+}
+
+#[test]
+fn test_inspect_runs() {
+    let output = run(&["inspect"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha Inspect"));
+        assert!(stdout.contains("Kernel"));
+        assert!(stdout.contains("Configuration"));
+        assert!(stdout.contains("Module Environment"));
+        assert!(stdout.contains("Debug Information"));
+        assert!(stdout.contains("Symbol Information"));
+        assert!(stdout.contains("Kernel Capability Summary"));
+        assert!(stdout.contains("Suitable for:"));
+    }
+}
+
+#[test]
+fn test_inspect_never_panics() {
+    // inspect must never panic even with missing config/procfs
+    let output = run(&["inspect"]);
+    if let Some(o) = output {
+        assert!(o.status.success());
+        // Should not contain panic messages
+        let stderr = String::from_utf8_lossy(&o.stderr);
+        assert!(!stderr.contains("panic"));
+        assert!(!stderr.contains("thread"));
     }
 }
 

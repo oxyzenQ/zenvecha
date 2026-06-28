@@ -4,6 +4,8 @@
 //! Zenvecha library — shared types, CLI, and core services.
 
 pub mod cli;
+pub mod commands;
+pub mod system;
 
 /// Run the Zenvecha CLI.
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
