@@ -136,17 +136,27 @@ pub fn compute() -> Vec<CategoryScore> {
 }
 
 /// Overall readiness label from aggregated stars.
+/// Strict criteria: requires high scores across all categories
+/// since kernel development needs the full environment.
 pub fn overall_rating(scores: &[CategoryScore]) -> &'static str {
     if scores.is_empty() {
         return "Unknown";
     }
-    let avg: f64 = scores.iter().map(|s| s.stars as f64).sum::<f64>() / scores.len() as f64;
-    if avg >= 4.0 {
+
+    // Count how many categories are weak (≤2★)
+    let weak = scores.iter().filter(|s| s.stars <= 2).count();
+    // Count how many are good (≥4★)
+    let good = scores.iter().filter(|s| s.stars >= 4).count();
+    let total = scores.len();
+
+    if good == total {
         "Ready"
-    } else if avg >= 2.5 {
+    } else if weak == 0 && good >= total / 2 {
         "Mostly Ready"
-    } else {
+    } else if weak <= 1 {
         "Needs Work"
+    } else {
+        "Needs Attention"
     }
 }
 

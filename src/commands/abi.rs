@@ -105,6 +105,20 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = writeln!(out);
 
+    // ---- VMLinux ---------------------------------------------------------
+
+    if let Some(ref vml) = sym_info.vmlinux_path {
+        let _ = writeln!(out, "VMLinux");
+        let _ = writeln!(out, "  Path     : {vml}");
+        if let Some(sz) = sym_info.vmlinux_size {
+            let _ = writeln!(out, "  Size     : {}", human_size(sz));
+        }
+        if let Some(ref bid) = sym_info.vmlinux_build_id {
+            let _ = writeln!(out, "  Build ID : {bid}");
+        }
+        let _ = writeln!(out);
+    }
+
     // ---- Module Loader ----------------------------------------------------
 
     let _ = writeln!(out, "Module Loader");

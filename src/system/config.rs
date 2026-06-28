@@ -32,12 +32,21 @@ impl ConfigValue {
     }
 
     /// Human-readable label for display.
-    pub fn label(self) -> &'static str {
+    /// When the config file was available, `Missing` means the key was
+    /// genuinely absent ("not set"). When config is unavailable,
+    /// `Missing` means "Unknown".
+    pub fn label(self, config_available: bool) -> &'static str {
         match self {
             ConfigValue::Yes => "y",
             ConfigValue::Module => "m",
             ConfigValue::No => "not set",
-            ConfigValue::Missing => "Unknown",
+            ConfigValue::Missing => {
+                if config_available {
+                    "not set"
+                } else {
+                    "Unknown"
+                }
+            }
         }
     }
 
@@ -143,9 +152,10 @@ mod tests {
 
     #[test]
     fn label_output() {
-        assert_eq!(ConfigValue::Yes.label(), "y");
-        assert_eq!(ConfigValue::Module.label(), "m");
-        assert_eq!(ConfigValue::No.label(), "not set");
-        assert_eq!(ConfigValue::Missing.label(), "Unknown");
+        assert_eq!(ConfigValue::Yes.label(true), "y");
+        assert_eq!(ConfigValue::Module.label(true), "m");
+        assert_eq!(ConfigValue::No.label(true), "not set");
+        assert_eq!(ConfigValue::Missing.label(false), "Unknown");
+        assert_eq!(ConfigValue::Missing.label(true), "not set");
     }
 }

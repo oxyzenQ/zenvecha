@@ -55,17 +55,23 @@ fn extract_version(proc: &str) -> Option<String> {
 }
 
 fn extract_compiler(proc: &str) -> Option<String> {
-    // Look for compiler string in parentheses
-    // "... (gcc (GCC) 14.2.1, ...)" or "... (clang version 19.1.0, ...)"
+    // "Linux version 6.x ... (gcc (GCC) 14.2.1, ...)"
     let start = proc.find('(')? + 1;
     let rest = &proc[start..];
     let end = rest.find(')')?;
-    let compiler = &rest[..end];
+    let raw = &rest[..end];
 
-    if compiler.len() > 120 {
-        return Some(format!("{}…", &compiler[..117]));
+    // Validate: must contain a known compiler identifier
+    let lower = raw.to_lowercase();
+    if lower.contains("gcc") || lower.contains("clang") || lower.contains("llvm") {
+        if raw.len() > 120 {
+            return Some(format!("{}…", &raw[..117]));
+        }
+        return Some(raw.to_string());
     }
-    Some(compiler.to_string())
+
+    // Not a recognizable compiler string — likely a build host identifier
+    None
 }
 
 fn build_vermagic(

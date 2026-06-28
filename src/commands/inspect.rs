@@ -63,7 +63,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let val = config_text.map_or(config::ConfigValue::Missing, |t| {
             config::config_value(t, key)
         });
-        let _ = writeln!(out, "  {label:.<36} {}", val.label());
+        let _ = writeln!(out, "  {label:.<36} {}", val.label(config_text.is_some()));
     }
     let _ = writeln!(out);
 

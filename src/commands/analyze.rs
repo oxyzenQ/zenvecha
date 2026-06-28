@@ -114,8 +114,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ---- Rust-for-Linux ---------------------------------------------------
 
     let _ = writeln!(out, "Rust-for-Linux");
-    let _ = writeln!(out, "  CONFIG_RUST              : {}", rust_cfg.label());
-    let _ = writeln!(out, "  CONFIG_RUST_IS_AVAILABLE : {}", rust_avail.label());
+    let _ = writeln!(
+        out,
+        "  CONFIG_RUST              : {}",
+        rust_cfg.label(cfg.is_some())
+    );
+    let _ = writeln!(
+        out,
+        "  CONFIG_RUST_IS_AVAILABLE : {}",
+        rust_avail.label(cfg.is_some())
+    );
 
     if let Some(ref min_ver) = bld.kernel_rustc_min {
         let _ = writeln!(out, "  Kernel requires rustc : {min_ver}");
@@ -168,7 +176,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ---- Module Development -----------------------------------------------
 
     let _ = writeln!(out, "Module Development");
-    let _ = writeln!(out, "  CONFIG_MODULES      : {}", cv("MODULES").label());
+    let _ = writeln!(
+        out,
+        "  CONFIG_MODULES      : {}",
+        cv("MODULES").label(cfg.is_some())
+    );
     print_bool_opt(&mut out, "Module signing", mod_info.signing_enabled);
     print_bool(&mut out, "Signing required", mod_info.signing_required);
 

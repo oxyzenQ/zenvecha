@@ -121,12 +121,14 @@ fn verify_headers(build_dir: Option<&str>) -> HeaderStatus {
         Path::new(&format!("{dir}/include/linux")).is_dir(),
         Path::new(&format!("{dir}/Makefile")).exists(),
         Path::new(&format!("{dir}/Kconfig")).exists(),
+        Path::new(&format!("{dir}/include/generated/autoconf.h")).exists()
+            || Path::new(&format!("{dir}/include/config/auto.conf")).exists(),
     ];
 
     let count = checks.iter().filter(|&&p| p).count();
     match count {
-        3 => HeaderStatus::Ready,
-        1 | 2 => HeaderStatus::Partial,
+        4 => HeaderStatus::Ready,
+        2 | 3 => HeaderStatus::Partial,
         _ => HeaderStatus::Broken,
     }
 }

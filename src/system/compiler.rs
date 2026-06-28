@@ -73,7 +73,13 @@ fn extract_compiler(proc: &str) -> Option<String> {
     let start = proc.find('(')? + 1;
     let rest = &proc[start..];
     let end = rest.find(')')?;
-    Some(rest[..end].to_string())
+    let raw = &rest[..end];
+    let lower = raw.to_lowercase();
+    if lower.contains("gcc") || lower.contains("clang") || lower.contains("llvm") {
+        Some(raw.to_string())
+    } else {
+        None
+    }
 }
 
 fn gcc_version() -> Option<String> {
