@@ -17,7 +17,10 @@ pub struct ModuleLoaderInfo {
 /// Inspect the module loader via /sys/module and kernel config.
 pub fn inspect_loader(cfg: Option<&str>) -> ModuleLoaderInfo {
     let loaded_count = count_loaded_modules();
-    let signed_supported = check_module_signing();
+    let signed_supported = match cfg {
+        Some(c) => super::config::config_value(c, "MODULE_SIG").is_enabled(),
+        None => check_module_signing(),
+    };
     let compression = detect_compression(cfg);
     let livepatch_enabled = check_livepatch(cfg);
 
@@ -40,6 +43,8 @@ fn count_loaded_modules() -> u64 {
 }
 
 fn check_module_signing() -> bool {
+    // Default: use CONFIG_MODULE_SIG from config if available
+    // Fallback: check /sys/module/*/signature
     let dir = Path::new("/sys/module");
     if !dir.is_dir() {
         return false;

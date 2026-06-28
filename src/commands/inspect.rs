@@ -86,7 +86,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     );
     print_bool(&mut out, "  Build directory", mod_info.build_dir_present);
     print_bool(&mut out, "  Headers", mod_info.headers_available);
-    print_bool_opt(&mut out, "  Module signing", mod_info.signing_enabled);
+    print_bool_opt(&mut out, "  Signing support", mod_info.signing_enabled);
     print_bool(&mut out, "  Signing required", mod_info.signing_required);
     let _ = writeln!(out);
 
@@ -116,62 +116,53 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = writeln!(out);
 
-    // Capability summary
-    let r4l_known = rust_cfg.is_known() || rust_avail.is_known();
+    // Capability summary — capabilities are about kernel config, not dev env
     let r4l_ok = rust_cfg.is_enabled() && rust_avail.is_enabled();
+    let r4l_known = rust_cfg.is_known() || rust_avail.is_known();
 
-    let modsig_known = mod_info.signing_enabled.is_some();
-    let modsig_ok = mod_info.signing_enabled == Some(true);
-
-    let mod_known = config_text
-        .map(|t| config::config_value(t, "MODULES").is_known())
-        .unwrap_or(false);
-    let mod_ok = config_text
+    let mod_support = config_text
         .map(|t| config::config_value(t, "MODULES").is_enabled())
-        .unwrap_or(false)
-        && mod_info.headers_available;
-
-    let btf_known = config_text
-        .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_known())
         .unwrap_or(false);
+
+    let modsig_ok = mod_info.signing_enabled == Some(true);
+    let modsig_known = mod_info.signing_enabled.is_some();
+
     let btf_ok = config_text
         .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_enabled())
         .unwrap_or(false)
         && debug.btf_available;
+    let btf_known = config_text
+        .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_known())
+        .unwrap_or(false);
 
+    let lp_ok = config_text
+        .map(|t| config::config_value(t, "LIVEPATCH").is_enabled())
+        .unwrap_or(false);
     let lp_known = config_text
         .map(|t| config::config_value(t, "LIVEPATCH").is_known())
         .unwrap_or(false);
-    let lp_ok = config_text
-        .map(|t| config::config_value(t, "LIVEPATCH").is_enabled())
-        .unwrap_or(false)
-        && mod_ok;
 
     let ks_ok = ks_info.exists && ks_info.readable;
 
     let _ = writeln!(out, "Kernel Capability Summary");
     let _ = writeln!(out);
     print_tri(&mut out, "Rust for Linux", r4l_ok, r4l_known);
-    print_tri(&mut out, "Modules", mod_ok, mod_known);
+    print_tri(&mut out, "Modules", mod_support, mod_support);
     print_tri(&mut out, "Module Signing", modsig_ok, modsig_known);
     print_tri(&mut out, "BTF", btf_ok, btf_known);
     print_tri(&mut out, "Livepatch", lp_ok, lp_known);
     print_tri(&mut out, "Kallsyms", ks_ok, true);
     let _ = writeln!(out);
 
+    // "Suitable for" depends on dev environment, not just kernel capability
+    let mod_dev_ok = mod_support && mod_info.headers_available && kernel::compiler_available();
     let _ = writeln!(out, "Suitable for:");
-    print_check(
-        &mut out,
-        "module development",
-        mod_ok && kernel::compiler_available(),
-    );
+    print_check(&mut out, "module development", mod_dev_ok);
     print_check(&mut out, "symbol analysis", ks_ok);
-    print_check(&mut out, "live patching", lp_ok && ks_ok && mod_ok);
+    print_check(&mut out, "live patching", lp_ok && ks_ok && mod_support);
 
     Ok(())
 }
-
-// ---- helpers ---------------------------------------------------------------
 
 fn print_kv(out: &mut io::StdoutLock<'_>, label: &str, value: Option<&str>) {
     match value {

@@ -48,12 +48,17 @@ pub fn generate(ctx: &RecCtx) -> Vec<String> {
 
     // Headers
     if !ctx.headers_available {
+        let mut needs_reboot = false;
         if let (Some(r), Some(h)) = (ctx.release, ctx.headers_ver)
             && r != h
         {
             recs.push(format!("Reboot into updated kernel ({h})"));
+            needs_reboot = true;
         }
-        recs.push("Install kernel headers matching running kernel".into());
+        // Don't suggest install if reboot will fix it
+        if !needs_reboot {
+            recs.push("Install kernel headers matching running kernel".into());
+        }
     }
 
     // Build tree

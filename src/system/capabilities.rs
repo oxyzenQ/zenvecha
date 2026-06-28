@@ -185,6 +185,17 @@ pub fn collect_facts(ctx: &ReportContext) -> Vec<String> {
         facts.push(format!("Kernel compiled with: {comp}"));
     }
 
+    if let Some(ref vml) = ctx.sym_info.vmlinux_path {
+        if let Some(sz) = ctx.sym_info.vmlinux_size {
+            facts.push(format!("VMLinux: {vml} ({})", human_size(sz)));
+        } else {
+            facts.push(format!("VMLinux: {vml}"));
+        }
+        if let Some(ref bid) = ctx.sym_info.vmlinux_build_id {
+            facts.push(format!("VMLinux Build ID: {bid}"));
+        }
+    }
+
     if let Some(ref arch) = ctx.arch {
         facts.push(format!("Architecture: {arch}"));
     }
@@ -193,6 +204,16 @@ pub fn collect_facts(ctx: &ReportContext) -> Vec<String> {
 }
 
 // ---- helpers ---------------------------------------------------------------
+
+fn human_size(bytes: u64) -> String {
+    if bytes >= 1_048_576 {
+        format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+    } else if bytes >= 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{bytes} B")
+    }
+}
 
 fn to_status(v: ConfigValue) -> CapabilityStatus {
     if v.is_enabled() {
