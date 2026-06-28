@@ -64,7 +64,9 @@ pub fn generate(ctx: &RecCtx) -> Vec<String> {
             "Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".into(),
         );
     }
-    if !ctx.bindgen_installed {
+    if !ctx.bindgen_installed
+        && (ctx.config_rust.is_enabled() || ctx.config_rust_available.is_enabled())
+    {
         recs.push("Install bindgen: cargo install bindgen-cli".into());
     }
     if !ctx.llvm_installed {

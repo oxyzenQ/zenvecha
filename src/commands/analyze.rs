@@ -106,7 +106,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             bld.source_dir.as_deref().unwrap_or("not found")
         );
     }
-    print_path_kv(&mut out, "Module.symvers", bld.module_symvers.as_deref());
+    print_path_kv(
+        &mut out,
+        "Module.symvers (source tree)",
+        bld.module_symvers.as_deref(),
+    );
     match bld.system_map.as_deref() {
         Some(p) => {
             let _ = writeln!(out, "System.map : {p}");

@@ -159,7 +159,7 @@ pub fn collect_facts(ctx: &ReportContext) -> Vec<String> {
     let mut facts: Vec<String> = Vec::new();
 
     if let Some(n) = ctx.sym_info.symbol_count {
-        facts.push(format!("{n} exported kernel symbols"));
+        facts.push(format!("{n} kernel symbols"));
     }
 
     if ctx.loader.loaded_count > 0 {
@@ -226,14 +226,6 @@ pub fn collect_facts(ctx: &ReportContext) -> Vec<String> {
     }
     if ctx.tracefs_ok {
         facts.push("tracefs mounted".into());
-    }
-
-    // Module compression from config
-    if ctx.abi_info.module_compression != "Unknown" {
-        facts.push(format!(
-            "Module compression: {}",
-            ctx.abi_info.module_compression
-        ));
     }
 
     facts

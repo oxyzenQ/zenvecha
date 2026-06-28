@@ -72,7 +72,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // ---- Module.symvers ---------------------------------------------------
 
-    let _ = writeln!(out, "Module.symvers");
+    let _ = writeln!(out, "Module.symvers (running kernel)");
     match &sym_info.module_symvers_path {
         Some(p) => {
             let _ = writeln!(out, "  Path          : {p}");

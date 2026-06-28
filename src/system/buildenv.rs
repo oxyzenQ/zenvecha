@@ -28,7 +28,7 @@ impl HeaderStatus {
 
     pub fn label(self) -> &'static str {
         match self {
-            HeaderStatus::Ready => "Ready",
+            HeaderStatus::Ready => "Complete",
             HeaderStatus::Partial => "Partial",
             HeaderStatus::Broken => "Broken",
             HeaderStatus::Missing => "Missing",
