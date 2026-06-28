@@ -204,18 +204,21 @@ impl Doctor {
             return;
         }
 
-        // Show what's wrong
+        // Detected issues — each on its own line for readability
         let _ = writeln!(out, "Detected issues");
         let _ = writeln!(out);
         for c in &failures {
             let _ = writeln!(out, " {}", c.name);
+            let _ = writeln!(out);
             if let Some(ref reason) = c.reason {
-                let _ = writeln!(out, "   {reason}");
+                for line in reason.lines() {
+                    let _ = writeln!(out, "   {line}");
+                }
+                let _ = writeln!(out);
             }
         }
-        let _ = writeln!(out);
 
-        // Automatic fixes (package installs that can be scripted)
+        // Automatic fixes — commands safe to run
         if !self.fix_commands.is_empty() {
             let _ = writeln!(out, "Automatic fixes");
             let _ = writeln!(out);
@@ -227,24 +230,21 @@ impl Doctor {
             let _ = writeln!(out);
         }
 
-        // Manual actions (reboot, kernel config, architecture)
-        let manual_names: Vec<&str> = failures
+        // Manual actions — extracted from check reasons
+        let manual: Vec<&str> = failures
             .iter()
-            .filter(|c| {
-                c.reason.as_deref().is_some_and(|r| {
-                    r.contains("reboot")
-                        || r.contains("CONFIG_RUST")
-                        || r.contains("Zenvecha requires")
-                })
-            })
-            .map(|c| c.name)
+            .filter_map(|c| manual_action_label(c))
             .collect();
 
-        if !manual_names.is_empty() {
+        if !manual.is_empty() {
+            if self.fix_commands.is_empty() {
+                let _ = writeln!(out, "No automatic fixes available.");
+                let _ = writeln!(out);
+            }
             let _ = writeln!(out, "Manual actions");
             let _ = writeln!(out);
-            for (i, name) in manual_names.iter().enumerate() {
-                let _ = writeln!(out, " {}. {name} — see details above", i + 1);
+            for (i, label) in manual.iter().enumerate() {
+                let _ = writeln!(out, " {}. {label}", i + 1);
             }
             let _ = writeln!(out);
             let _ = writeln!(out, "These require manual intervention.");
@@ -252,6 +252,24 @@ impl Doctor {
         }
     }
 
+    // -- helpers ------------------------------------------------------------
+}
+
+/// Extract a concise action label for --fix manual-actions section.
+fn manual_action_label(c: &Check) -> Option<&'static str> {
+    let reason = c.reason.as_deref()?;
+    match c.name {
+        "Kernel headers" if reason.contains("reboot") => Some("reboot into the installed kernel"),
+        "Rust-for-Linux" => {
+            Some("boot a kernel with CONFIG_RUST=y / CONFIG_RUST_IS_AVAILABLE=y enabled")
+        }
+        "Kernel version" => Some("install and boot Linux 6.x or later"),
+        "CPU architecture" => Some("use an x86_64 system"),
+        _ => None,
+    }
+}
+
+impl Doctor {
     // -- individual checks --------------------------------------------------
 
     fn check_kernel(&mut self, kver: Option<&str>) -> bool {
