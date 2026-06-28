@@ -16,18 +16,19 @@
 - [x] `zenvecha doctor --fix` — actionable remediation
 - [x] Gatekeeper: fmt, clippy, build, test, codespell, audit, deny
 
-### v0.3.0 "Analyze"
-- [x] `zenvecha analyze` — kernel development readiness assessment
-- [x] Toolchain inspection (rustc, cargo, rustfmt, clippy, bindgen, LLVM)
-- [x] Kernel build environment (source dir, Module.symvers, System.map, compile_commands)
-- [x] Rust-for-Linux deeper analysis (compiler compatibility, buildability)
-- [x] Module development capability (signing, compression, loadable modules)
-- [x] Debug infrastructure (debugfs, tracefs mounts)
-- [x] Filesystem path checks with Present/Missing/PermissionDenied tri-state
-- [x] Compatibility report with readiness percentage
-- [x] Actionable recommendations based on failed checks
-- [x] Three new system modules: toolchain, buildenv, fscheck
-- [x] Zero unsafe, zero new crate deps
+### v0.4.0 "ABI Intelligence"
+- [x] `zenvecha abi` — kernel ABI & compatibility intelligence
+- [x] Kernel ABI: utsrelease, vermagic, module layout, compiler string
+- [x] System.map search across 3 locations
+- [x] Module.symvers: CRC count, file size, last modified (streaming)
+- [x] Kernel symbols: streaming count via BufRead (O(1) memory)
+- [x] kallsyms: Available/Restricted/PermissionDenied/Hidden
+- [x] Module loader: loaded count, signing, compression, livepatch
+- [x] Compiler ABI: kernel vs installed gcc/clang/rustc
+- [x] Compatibility: Compatible/Probably/Unknown/NotCompatible
+- [x] 4 new system modules: abi, symbols, compiler, moduleinfo
+- [x] 12 integration + 6 unit = 18 tests
+- [x] Zero unsafe, zero new crates, all streaming
 
 ---
 
@@ -161,6 +162,7 @@
 | v0.1    | System readiness check (doctor) |
 | v0.2    | Kernel capability discovery (inspect) |
 | v0.3    | Development readiness assessment (analyze) |
+| v0.4    | Kernel ABI & compatibility intelligence (abi) |
 | v0.5    | Runtime function redirection |
 | v0.8    | Experimental live patching |
 | v1.0    | Desktop support |

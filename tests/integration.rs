@@ -133,6 +133,32 @@ fn test_analyze_star_scoring_present() {
 }
 
 #[test]
+fn test_abi_runs() {
+    let output = run(&["abi"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha ABI"));
+        assert!(stdout.contains("Kernel ABI"));
+        assert!(stdout.contains("System.map"));
+        assert!(stdout.contains("Module.symvers"));
+        assert!(stdout.contains("Kernel Symbols"));
+        assert!(stdout.contains("Module Loader"));
+        assert!(stdout.contains("Compiler ABI"));
+        assert!(stdout.contains("Compatibility Summary"));
+    }
+}
+
+#[test]
+fn test_abi_never_panics() {
+    let output = run(&["abi"]);
+    if let Some(o) = output {
+        assert!(o.status.success());
+        let stderr = String::from_utf8_lossy(&o.stderr);
+        assert!(!stderr.contains("panic"));
+    }
+}
+
+#[test]
 fn test_unknown_command() {
     let output = run(&["nonexistent"]);
     if let Some(o) = output {

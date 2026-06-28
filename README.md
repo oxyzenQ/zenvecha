@@ -18,14 +18,15 @@
 
 ## Status
 
-**Phase 3 — Development Readiness (v0.3.0)**
+**Phase 4 — ABI & Symbol Intelligence (v0.4.0)**
 
-Kernel development environment analysis. Diagnostics only, no modification.
+Kernel compatibility analysis. Read-only — no loading, no patching.
 
 ```bash
 zenvecha doctor   # System readiness check
 zenvecha inspect  # Kernel capability discovery
 zenvecha analyze  # Development readiness assessment
+zenvecha abi      # Kernel ABI & compatibility intelligence
 ```
 
 ---

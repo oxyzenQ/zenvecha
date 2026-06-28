@@ -28,6 +28,7 @@ pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {
         }
         "inspect" => crate::commands::inspect::run()?,
         "analyze" => crate::commands::analyze::run()?,
+        "abi" => crate::commands::abi::run()?,
         _ => {
             eprintln!("zenvecha: unknown command '{}'", args[1]);
             print_usage();
@@ -54,6 +55,10 @@ fn print_usage() {
     let _ = writeln!(
         out,
         "  zenvecha analyze           Development readiness assessment"
+    );
+    let _ = writeln!(
+        out,
+        "  zenvecha abi               Kernel ABI & compatibility intelligence"
     );
     let _ = writeln!(out);
     let _ = writeln!(out, "See docs/ for full documentation.");

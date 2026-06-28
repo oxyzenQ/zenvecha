@@ -5,14 +5,18 @@
 //!
 //! Each submodule inspects one subsystem. No mutation, no side effects.
 
+pub mod abi;
 pub mod btf;
 pub mod buildenv;
+pub mod compiler;
 pub mod config;
 pub mod fscheck;
 pub mod kallsyms;
 pub mod kernel;
+pub mod moduleinfo;
 pub mod modules;
 pub mod recommend;
 pub mod rust;
 pub mod scoring;
+pub mod symbols;
 pub mod toolchain;

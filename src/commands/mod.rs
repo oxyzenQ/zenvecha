@@ -3,6 +3,7 @@
 
 //! Command modules — one file per subcommand.
 
+pub mod abi;
 pub mod analyze;
 pub mod doctor;
 pub mod inspect;
