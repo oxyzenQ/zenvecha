@@ -7,3 +7,4 @@ pub mod abi;
 pub mod analyze;
 pub mod doctor;
 pub mod inspect;
+pub mod report;

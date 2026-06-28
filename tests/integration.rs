@@ -159,6 +159,43 @@ fn test_abi_never_panics() {
 }
 
 #[test]
+fn test_report_runs() {
+    let output = run(&["report"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha Kernel Intelligence Report"));
+        assert!(stdout.contains("System Summary"));
+        assert!(stdout.contains("Capability Matrix"));
+        assert!(stdout.contains("Development Readiness"));
+    }
+}
+
+#[test]
+fn test_report_compact() {
+    let output = run(&["report", "--compact"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha Report"));
+        assert!(stdout.contains("Caps:"));
+        assert!(stdout.contains("Score:"));
+    }
+}
+
+#[test]
+fn test_report_json() {
+    let output = run(&["report", "--json"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("\"system\""));
+        assert!(stdout.contains("\"capabilities\""));
+        assert!(stdout.contains("\"readiness\""));
+        assert!(stdout.contains("\"risks\""));
+        assert!(stdout.contains("\"recommendations\""));
+        assert!(stdout.contains("\"facts\""));
+    }
+}
+
+#[test]
 fn test_unknown_command() {
     let output = run(&["nonexistent"]);
     if let Some(o) = output {
