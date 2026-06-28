@@ -8,6 +8,8 @@ use std::path::Path;
 /// Result of module environment inspection.
 pub struct ModuleInfo {
     pub modules_dir: Option<String>,
+    pub running_kernel: Option<String>,
+    pub installed_header_version: Option<String>,
     pub build_dir_present: bool,
     pub headers_available: bool,
     pub signing_enabled: Option<bool>,
@@ -29,6 +31,10 @@ pub fn inspect_modules(config: Option<&str>) -> ModuleInfo {
 
     let headers_available = build_dir_present;
 
+    // Scan for installed header versions that differ from running
+    let running_kernel = release.clone();
+    let installed_header_version = running_kernel.as_deref().and_then(installed_header_version);
+
     // Module signing: prefer CONFIG_MODULE_SIG from kernel config;
     // fall back to checking if any loaded module has a signature attribute.
     let signing_enabled = match config {
@@ -44,6 +50,8 @@ pub fn inspect_modules(config: Option<&str>) -> ModuleInfo {
 
     ModuleInfo {
         modules_dir,
+        running_kernel,
+        installed_header_version,
         build_dir_present,
         headers_available,
         signing_enabled,
@@ -77,4 +85,24 @@ fn check_sig_enforce() -> bool {
         return true;
     }
     false
+}
+
+/// Find an installed kernel header version that differs from the running one.
+fn installed_header_version(running: &str) -> Option<String> {
+    let modules = Path::new("/lib/modules");
+    if !modules.exists() {
+        return None;
+    }
+    let entries = std::fs::read_dir(modules).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name == running {
+            continue;
+        }
+        if entry.path().join("build").exists() {
+            return Some(name.to_string());
+        }
+    }
+    None
 }

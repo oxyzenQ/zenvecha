@@ -26,7 +26,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let config_text = config_text.as_deref();
 
     let mod_info = modules::inspect_modules(config_text);
-    let kallsyms = kallsyms::inspect_kallsyms();
+    let ks_info = kallsyms::inspect_kallsyms();
     let debug = btf::inspect_debug();
     let (rust_cfg, rust_avail) = rust::rust_config(config_text);
 
@@ -58,6 +58,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let cfg_keys = [
         "MODULES",
+        "MODULE_SIG",
         "KALLSYMS",
         "KALLSYMS_ALL",
         "BPF",
@@ -70,20 +71,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let label = format!("  CONFIG_{key}");
         match config_text.and_then(|t| config::config_is_set(t, key)) {
             Some(true) => {
-                let val = if config_text.and_then(|t| config::config_is_set(t, key)) == Some(true)
-                    && key.contains("RUST_IS_AVAILABLE")
-                {
-                    "y"
-                } else {
-                    config_val_label(config_text, key)
-                };
+                let val = config_val_label(config_text, key);
                 let _ = writeln!(out, "  {label:.<36} {val}");
             }
             Some(false) => {
                 let _ = writeln!(out, "  {label:.<36} not set");
             }
             None => {
-                let _ = writeln!(out, "  {label:.<36} unknown");
+                let _ = writeln!(out, "  {label:.<36} Unknown");
             }
         }
     }
@@ -91,6 +86,16 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Module environment
     let _ = writeln!(out, "Module Environment");
+    print_kv(
+        &mut out,
+        "  Running kernel",
+        mod_info.running_kernel.as_deref(),
+    );
+    print_kv(
+        &mut out,
+        "  Installed headers",
+        mod_info.installed_header_version.as_deref(),
+    );
     print_kv(
         &mut out,
         "  Modules directory",
@@ -110,46 +115,67 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Symbol information
     let _ = writeln!(out, "Symbol Information");
-    if kallsyms.exists {
-        let access = if kallsyms.readable {
-            if kallsyms.root_only {
-                "present, readable (root only)"
-            } else {
-                "present, readable"
+    if ks_info.exists {
+        let label = "  /proc/kallsyms";
+        match (ks_info.readable, ks_info.root_only) {
+            (true, true) => {
+                let _ = writeln!(out, "{label} : present, readable (root only)");
             }
-        } else {
-            "present, not readable"
-        };
-        let _ = writeln!(out, "  /proc/kallsyms : {access}");
+            (true, false) => {
+                let _ = writeln!(out, "{label} : present, readable");
+            }
+            (false, _) => {
+                let _ = writeln!(out, "{label} : present, permission denied");
+            }
+        }
     } else {
         let _ = writeln!(out, "  /proc/kallsyms : not found");
     }
     let _ = writeln!(out);
 
-    // ---- summary ----------------------------------------------------------
+    // ---- capability summary -----------------------------------------------
 
+    let r4l_known = rust_cfg.is_some() || rust_avail.is_some();
     let r4l_ok = rust_cfg == Some(true) || rust_avail == Some(true);
+
+    let modules_known = config_text
+        .and_then(|t| config::config_is_set(t, "MODULES"))
+        .is_some();
     let modules_ok = config_text
         .and_then(|t| config::config_is_set(t, "MODULES"))
         .unwrap_or(false)
         && mod_info.headers_available;
+
+    let modsig_known = mod_info.signing_enabled.is_some();
+    let modsig_ok = mod_info.signing_enabled == Some(true);
+
+    let btf_known = config_text
+        .and_then(|t| config::config_is_set(t, "DEBUG_INFO_BTF"))
+        .is_some();
     let btf_ok = config_text
         .and_then(|t| config::config_is_set(t, "DEBUG_INFO_BTF"))
         .unwrap_or(false)
         && debug.btf_available;
+
+    let livepatch_known = config_text
+        .and_then(|t| config::config_is_set(t, "LIVEPATCH"))
+        .is_some();
     let livepatch_ok = config_text
         .and_then(|t| config::config_is_set(t, "LIVEPATCH"))
         .unwrap_or(false)
         && modules_ok;
-    let sym_ok = kallsyms.exists && kallsyms.readable;
+
+    let ks_ok = ks_info.exists && ks_info.readable;
+    let ks_known = ks_info.exists;
 
     let _ = writeln!(out, "Kernel Capability Summary");
     let _ = writeln!(out);
-    print_check(&mut out, "Rust for Linux", r4l_ok);
-    print_check(&mut out, "Modules", modules_ok);
-    print_check(&mut out, "BTF", btf_ok);
-    print_check(&mut out, "Livepatch", livepatch_ok);
-    print_check(&mut out, "Kallsyms", sym_ok);
+    print_tri_check(&mut out, "Rust for Linux", r4l_ok, r4l_known);
+    print_tri_check(&mut out, "Modules", modules_ok, modules_known);
+    print_tri_check(&mut out, "Module Signing", modsig_ok, modsig_known);
+    print_tri_check(&mut out, "BTF", btf_ok, btf_known);
+    print_tri_check(&mut out, "Livepatch", livepatch_ok, livepatch_known);
+    print_tri_check(&mut out, "Kallsyms", ks_ok, ks_known);
     let _ = writeln!(out);
 
     let _ = writeln!(out, "Suitable for:");
@@ -158,11 +184,11 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         "module development",
         modules_ok && kernel::compiler_available(),
     );
-    print_check(&mut out, "symbol analysis", sym_ok);
+    print_check(&mut out, "symbol analysis", ks_ok);
     print_check(
         &mut out,
         "live patching",
-        livepatch_ok && sym_ok && modules_ok,
+        livepatch_ok && ks_ok && modules_ok,
     );
 
     Ok(())
@@ -176,7 +202,7 @@ fn print_kv(out: &mut io::StdoutLock<'_>, label: &str, value: Option<&str>) {
             let _ = writeln!(out, "{label} : {v}");
         }
         _ => {
-            let _ = writeln!(out, "{label} : unknown");
+            let _ = writeln!(out, "{label} : Unknown");
         }
     }
 }
@@ -198,7 +224,7 @@ fn print_bool_opt(out: &mut io::StdoutLock<'_>, label: &str, val: Option<bool>) 
             let _ = writeln!(out, "{label} : disabled");
         }
         None => {
-            let _ = writeln!(out, "{label} : unknown");
+            let _ = writeln!(out, "{label} : Unknown");
         }
     }
 }
@@ -208,10 +234,20 @@ fn print_check(out: &mut io::StdoutLock<'_>, label: &str, ok: bool) {
     let _ = writeln!(out, "  {mark} {label}");
 }
 
+/// Three-state check: ✔ available, ✘ unavailable, ? unknown.
+fn print_tri_check(out: &mut io::StdoutLock<'_>, label: &str, ok: bool, known: bool) {
+    if !known {
+        let _ = writeln!(out, "  ? {label}");
+    } else if ok {
+        let _ = writeln!(out, "  ✔ {label}");
+    } else {
+        let _ = writeln!(out, "  ✘ {label}");
+    }
+}
+
 fn config_val_label<'a>(config_text: Option<&str>, key: &str) -> &'a str {
     match config_text.and_then(|t| config::config_is_set(t, key)) {
         Some(true) => {
-            // Check if it's =m or =y
             if let Some(t) = config_text {
                 for line in t.lines() {
                     let trimmed = line.trim();
@@ -225,6 +261,6 @@ fn config_val_label<'a>(config_text: Option<&str>, key: &str) -> &'a str {
             }
             "y"
         }
-        _ => "y", // fallback for enabled
+        _ => "y",
     }
 }
