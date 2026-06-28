@@ -83,6 +83,33 @@ fn test_inspect_never_panics() {
 }
 
 #[test]
+fn test_analyze_runs() {
+    let output = run(&["analyze"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Zenvecha Analyze"));
+        assert!(stdout.contains("Toolchain"));
+        assert!(stdout.contains("Kernel Build Environment"));
+        assert!(stdout.contains("Rust-for-Linux"));
+        assert!(stdout.contains("Module Development"));
+        assert!(stdout.contains("Debug Capability"));
+        assert!(stdout.contains("Filesystem Checks"));
+        assert!(stdout.contains("Compatibility Report"));
+        assert!(stdout.contains("Overall readiness"));
+    }
+}
+
+#[test]
+fn test_analyze_never_panics() {
+    let output = run(&["analyze"]);
+    if let Some(o) = output {
+        assert!(o.status.success());
+        let stderr = String::from_utf8_lossy(&o.stderr);
+        assert!(!stderr.contains("panic"));
+    }
+}
+
+#[test]
 fn test_unknown_command() {
     let output = run(&["nonexistent"]);
     if let Some(o) = output {

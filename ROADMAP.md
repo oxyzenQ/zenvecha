@@ -16,18 +16,18 @@
 - [x] `zenvecha doctor --fix` — actionable remediation
 - [x] Gatekeeper: fmt, clippy, build, test, codespell, audit, deny
 
-### v0.2.0 "Inspect"
-- [x] `zenvecha inspect` — kernel capability discovery
-- [x] Kernel version, architecture, compiler detection
-- [x] CONFIG_* parsing from /boot/config-* and /proc/config.gz
-- [x] Module environment (signing, headers, build dir)
-- [x] Debug information (BTF, DWARF)
-- [x] Symbol table accessibility (/proc/kallsyms)
-- [x] Rust-for-Linux support detection
-- [x] Capability summary with ✔/✘ indicators
-- [x] Modular architecture: commands/, system/
-- [x] No unsafe code
-- [x] Zero new crate dependencies
+### v0.3.0 "Analyze"
+- [x] `zenvecha analyze` — kernel development readiness assessment
+- [x] Toolchain inspection (rustc, cargo, rustfmt, clippy, bindgen, LLVM)
+- [x] Kernel build environment (source dir, Module.symvers, System.map, compile_commands)
+- [x] Rust-for-Linux deeper analysis (compiler compatibility, buildability)
+- [x] Module development capability (signing, compression, loadable modules)
+- [x] Debug infrastructure (debugfs, tracefs mounts)
+- [x] Filesystem path checks with Present/Missing/PermissionDenied tri-state
+- [x] Compatibility report with readiness percentage
+- [x] Actionable recommendations based on failed checks
+- [x] Three new system modules: toolchain, buildenv, fscheck
+- [x] Zero unsafe, zero new crate deps
 
 ---
 
@@ -160,6 +160,7 @@
 |---------|-------|
 | v0.1    | System readiness check (doctor) |
 | v0.2    | Kernel capability discovery (inspect) |
+| v0.3    | Development readiness assessment (analyze) |
 | v0.5    | Runtime function redirection |
 | v0.8    | Experimental live patching |
 | v1.0    | Desktop support |

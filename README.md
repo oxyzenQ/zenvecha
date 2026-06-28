@@ -18,13 +18,14 @@
 
 ## Status
 
-**Phase 2 — Kernel Capability Discovery (v0.2.0)**
+**Phase 3 — Development Readiness (v0.3.0)**
 
-Read-only kernel inspection. No patching, no modification.
+Kernel development environment analysis. Diagnostics only, no modification.
 
 ```bash
-zenvecha doctor   # Check system readiness
+zenvecha doctor   # System readiness check
 zenvecha inspect  # Kernel capability discovery
+zenvecha analyze  # Development readiness assessment
 ```
 
 ---

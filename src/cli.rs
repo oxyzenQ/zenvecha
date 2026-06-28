@@ -27,6 +27,7 @@ pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {
             crate::commands::doctor::Doctor::new().run(fix_mode)?;
         }
         "inspect" => crate::commands::inspect::run()?,
+        "analyze" => crate::commands::analyze::run()?,
         _ => {
             eprintln!("zenvecha: unknown command '{}'", args[1]);
             print_usage();
@@ -49,6 +50,10 @@ fn print_usage() {
     let _ = writeln!(
         out,
         "  zenvecha inspect           Kernel capability discovery"
+    );
+    let _ = writeln!(
+        out,
+        "  zenvecha analyze           Development readiness assessment"
     );
     let _ = writeln!(out);
     let _ = writeln!(out, "See docs/ for full documentation.");

@@ -6,8 +6,11 @@
 //! Each submodule inspects one subsystem. No mutation, no side effects.
 
 pub mod btf;
+pub mod buildenv;
 pub mod config;
+pub mod fscheck;
 pub mod kallsyms;
 pub mod kernel;
 pub mod modules;
 pub mod rust;
+pub mod toolchain;
