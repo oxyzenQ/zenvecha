@@ -14,6 +14,13 @@ use std::io::{self, Write};
 
 use crate::system::{btf, buildenv, config, fscheck, kallsyms, kernel, modules, rust, toolchain};
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RustCompat {
+    Compatible,
+    PartiallyCompatible,
+    NotCompatible,
+}
+
 // ---- public API ------------------------------------------------------------
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -84,7 +91,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     print_path_kv(&mut out, "Build directory", bld.build_dir.as_deref());
     print_path_kv(&mut out, "Source directory", bld.source_dir.as_deref());
     print_path_kv(&mut out, "Module.symvers", bld.module_symvers.as_deref());
-    print_path_kv(&mut out, "System.map", bld.system_map.as_deref());
+    match bld.system_map.as_deref() {
+        Some(p) => {
+            let _ = writeln!(out, "System.map : {p}");
+        }
+        None => {
+            let _ = writeln!(out, "System.map : Not installed (optional)");
+        }
+    }
     if bld.compile_commands {
         if let Some(ref d) = bld.build_dir {
             let _ = writeln!(out, "  compile_commands : {d}/compile_commands.json");
@@ -117,40 +131,33 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let _ = writeln!(out, "  Installed rustc       : Not installed");
     }
 
-    let rustc_compat = match (&bld.kernel_rustc_min, &tools.rustc) {
-        (Some(min), Some(installed)) => {
-            let min_ver = min.split_whitespace().next().unwrap_or(min);
-            installed.contains(min_ver)
-        }
-        (Some(_), None) => false,
-        (None, Some(_)) => {
-            // Can't verify but both present
-            rust_cfg == Some(true) || rust_avail == Some(true)
-        }
-        (None, None) => false,
+    let rust_level = match (rust_cfg, rust_avail) {
+        (Some(true), Some(true)) => RustCompat::Compatible,
+        (_, Some(true)) => RustCompat::PartiallyCompatible,
+        _ => RustCompat::NotCompatible,
     };
+
     let _ = writeln!(
         out,
         "  Compatibility         : {}",
-        if rustc_compat {
-            "compatible"
-        } else {
-            "not verified"
+        match rust_level {
+            RustCompat::Compatible => "Compatible",
+            RustCompat::PartiallyCompatible =>
+                "Partially compatible (compiler available, kernel not built with Rust)",
+            RustCompat::NotCompatible => "Not compatible",
         }
     );
 
-    let r4l_buildable = rustc_compat
-        && (rust_cfg == Some(true) || rust_avail == Some(true))
-        && bld.build_dir.is_some();
-    let _ = writeln!(
-        out,
-        "  Rust modules buildable: {}",
-        if r4l_buildable {
-            "yes"
-        } else {
-            "no (see recommendations)"
-        }
-    );
+    let r4l_buildable =
+        rust_level == RustCompat::Compatible && bld.build_dir.is_some() && tools.rustc.is_some();
+    let r4l_msg = if r4l_buildable {
+        "yes"
+    } else if rust_level == RustCompat::PartiallyCompatible {
+        "no (CONFIG_RUST not enabled)"
+    } else {
+        "no (see recommendations)"
+    };
+    let _ = writeln!(out, "  Rust modules buildable: {r4l_msg}");
     let _ = writeln!(out);
 
     // ---- Module Development -----------------------------------------------
@@ -271,7 +278,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         },
         Check {
             category: "Rust",
-            passed: rustc_compat,
+            passed: rust_level == RustCompat::Compatible,
         },
         // Build
         Check {
@@ -289,10 +296,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         Check {
             category: "Build tree",
             passed: bld.module_symvers.is_some(),
-        },
-        Check {
-            category: "Build tree",
-            passed: bld.system_map.is_some(),
         },
         Check {
             category: "Build tree",
@@ -343,8 +346,26 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     for (cat, ok) in &categories {
-        let mark = if *ok { "✔" } else { "✘" };
-        let _ = writeln!(out, "  {mark} {cat}");
+        // Rust category uses three-state display
+        if *cat == "Rust" {
+            match rust_level {
+                RustCompat::Compatible => {
+                    let _ = writeln!(out, "  ✔ Rust");
+                }
+                RustCompat::PartiallyCompatible => {
+                    let _ = writeln!(
+                        out,
+                        "  ~ Rust (partial — compiler available, kernel not built with Rust)"
+                    );
+                }
+                RustCompat::NotCompatible => {
+                    let _ = writeln!(out, "  ✘ Rust");
+                }
+            }
+        } else {
+            let mark = if *ok { "✔" } else { "✘" };
+            let _ = writeln!(out, "  {mark} {cat}");
+        }
     }
     let _ = writeln!(out);
     let _ = writeln!(out, "  Overall readiness : {pct}%");
@@ -455,36 +476,15 @@ fn config_is(cfg: Option<&str>, key: &str) -> Option<bool> {
     cfg.and_then(|t| config::config_is_set(t, key))
 }
 
-/// Check whether a directory is a mount point by comparing its device
-/// with its parent's device.
+/// Check whether a path is a mount point by consulting /proc/mounts.
 fn is_mount_point(path: &str) -> bool {
-    use std::path::Path;
-    let p = Path::new(path);
-    if !p.is_dir() {
-        return false;
-    }
-    // Simple heuristic: if the directory is non-empty, it's likely mounted
-    // Better: stat the mountinfo
-    if let Ok(content) = std::fs::read_to_string("/proc/self/mountinfo") {
+    if let Ok(content) = std::fs::read_to_string("/proc/mounts") {
         for line in content.lines() {
-            // mountinfo format: ... - <fstype> <source> <mountpoint>
-            if line.contains(" - ") {
-                let parts: Vec<&str> = line.split(" - ").collect();
-                if parts.len() >= 2 {
-                    let tail = parts[1];
-                    let mp: Vec<&str> = tail.split_whitespace().collect();
-                    if mp.len() >= 2 && mp[1] == path {
-                        return true;
-                    }
-                }
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[1] == path {
+                return true;
             }
         }
-    }
-    // Fallback: check if any files exist in the directory
-    if let Ok(entries) = std::fs::read_dir(p)
-        && entries.count() > 0
-    {
-        return true;
     }
     false
 }

@@ -23,10 +23,7 @@ pub struct BuildEnvInfo {
 pub fn inspect_build_env() -> BuildEnvInfo {
     let running = crate::system::kernel::kernel_release();
 
-    let build_dir = running.as_ref().and_then(|r| {
-        let p = format!("/lib/modules/{r}/build");
-        Path::new(&p).is_dir().then_some(p)
-    });
+    let build_dir = find_build_dir(running.as_deref());
 
     let source_dir = running.as_ref().and_then(|r| {
         let p = format!("/lib/modules/{r}/source");
@@ -103,6 +100,44 @@ fn detect_kernel_rustc_min(build_dir: Option<&str>) -> Option<String> {
     let cfg = format!("{dir}/include/generated/rustc_cfg");
     if Path::new(&cfg).exists() {
         return Some("detected (version unknown)".into());
+    }
+
+    None
+}
+
+/// Search for the kernel build directory across common locations.
+/// Order: /lib/modules/<k>/build, /usr/src/linux*, /usr/src/kernels/*,
+///        /usr/lib/modules/<k>/build.
+fn find_build_dir(kernel: Option<&str>) -> Option<String> {
+    let k = kernel?;
+
+    // 1. /lib/modules/<kernel>/build (standard)
+    let std = format!("/lib/modules/{k}/build");
+    if Path::new(&std).is_dir() {
+        return Some(std);
+    }
+
+    // 2. /usr/src/linux* patterns (Arch/CachyOS variants)
+    if let Ok(entries) = std::fs::read_dir("/usr/src") {
+        for entry in entries.filter_map(|e| e.ok()) {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("linux") && entry.path().is_dir() {
+                return Some(format!("/usr/src/{name}"));
+            }
+        }
+    }
+
+    // 3. /usr/src/kernels/<kernel> (Fedora)
+    let fedora = format!("/usr/src/kernels/{k}");
+    if Path::new(&fedora).is_dir() {
+        return Some(fedora);
+    }
+
+    // 4. /usr/lib/modules/<kernel>/build (alternative layout)
+    let alt = format!("/usr/lib/modules/{k}/build");
+    if Path::new(&alt).is_dir() {
+        return Some(alt);
     }
 
     None
