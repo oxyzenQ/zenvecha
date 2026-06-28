@@ -3,36 +3,31 @@
 
 //! Analyze command — kernel development readiness assessment.
 //!
-//! Deeper than `inspect`. Evaluates toolchain, build environment,
-//! Rust-for-Linux compatibility, module development capability,
-//! debug infrastructure, and filesystem layout.
-//! Produces a compatibility report with a readiness percentage
-//! and actionable recommendations.
-//! Never modifies the system.
+//! Uses scoring and recommend modules. Orchestration only.
 
 use std::io::{self, Write};
 
-use crate::system::{btf, buildenv, config, fscheck, kallsyms, kernel, modules, rust, toolchain};
+use crate::system::{
+    btf, buildenv, config, fscheck, kallsyms, kernel, modules, recommend, rust, scoring, toolchain,
+};
+use config::ConfigValue;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum RustCompat {
+enum RustLevel {
     Compatible,
-    PartiallyCompatible,
+    Partial,
     NotCompatible,
 }
-
-// ---- public API ------------------------------------------------------------
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let stdout = io::stdout();
     let mut out = stdout.lock();
 
-    // Gather all data first
     let tools = toolchain::inspect_toolchain();
     let bld = buildenv::inspect_build_env();
     let release = kernel::kernel_release();
-    let distro = kernel::detect_distro();
-    let arch = kernel::architecture();
+    let _distro = kernel::detect_distro();
+    let _arch = kernel::architecture();
     let headers_ver = modules::inspect_modules(None).installed_header_version;
 
     let (config_text, _config_source) = config::read_kernel_config().unzip();
@@ -42,6 +37,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let ks_info = kallsyms::inspect_kallsyms();
     let dbg = btf::inspect_debug();
     let (rust_cfg, rust_avail) = rust::rust_config(cfg);
+
+    let cv = |k: &str| cfg.map_or(ConfigValue::Missing, |t| config::config_value(t, k));
 
     let fs_paths = {
         let rel = release.as_deref().unwrap_or("unknown");
@@ -53,14 +50,19 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         ])
     };
 
-    let debugfs_mounted = is_mount_point("/sys/kernel/debug");
-    let tracefs_mounted = is_mount_point("/sys/kernel/tracing");
+    let debugfs_mounted = mount_ok("/sys/kernel/debug");
+    let tracefs_mounted = mount_ok("/sys/kernel/tracing");
+
+    let rust_level = match (rust_cfg, rust_avail) {
+        (ConfigValue::Yes, ConfigValue::Yes) => RustLevel::Compatible,
+        (_, v) if v.is_enabled() => RustLevel::Partial,
+        _ => RustLevel::NotCompatible,
+    };
 
     // ---- Toolchain --------------------------------------------------------
 
     let _ = writeln!(out, "Zenvecha Analyze");
     let _ = writeln!(out);
-
     let _ = writeln!(out, "Toolchain");
     print_tool(&mut out, "rustc", &tools.rustc);
     print_tool(&mut out, "cargo", &tools.cargo);
@@ -90,6 +92,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     print_path_kv(&mut out, "Build directory", bld.build_dir.as_deref());
     print_path_kv(&mut out, "Source directory", bld.source_dir.as_deref());
+    let _ = writeln!(out, "  Header integrity    : {}", bld.header_status.label());
     print_path_kv(&mut out, "Module.symvers", bld.module_symvers.as_deref());
     match bld.system_map.as_deref() {
         Some(p) => {
@@ -111,13 +114,8 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ---- Rust-for-Linux ---------------------------------------------------
 
     let _ = writeln!(out, "Rust-for-Linux");
-    print_config(&mut out, "CONFIG_RUST", cfg, "RUST");
-    print_config(
-        &mut out,
-        "CONFIG_RUST_IS_AVAILABLE",
-        cfg,
-        "RUST_IS_AVAILABLE",
-    );
+    let _ = writeln!(out, "  CONFIG_RUST              : {}", rust_cfg.label());
+    let _ = writeln!(out, "  CONFIG_RUST_IS_AVAILABLE : {}", rust_avail.label());
 
     if let Some(ref min_ver) = bld.kernel_rustc_min {
         let _ = writeln!(out, "  Kernel requires rustc : {min_ver}");
@@ -131,29 +129,36 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         let _ = writeln!(out, "  Installed rustc       : Not installed");
     }
 
-    let rust_level = match (rust_cfg, rust_avail) {
-        (Some(true), Some(true)) => RustCompat::Compatible,
-        (_, Some(true)) => RustCompat::PartiallyCompatible,
-        _ => RustCompat::NotCompatible,
-    };
-
-    let _ = writeln!(
-        out,
-        "  Compatibility         : {}",
-        match rust_level {
-            RustCompat::Compatible => "Compatible",
-            RustCompat::PartiallyCompatible =>
-                "Partially compatible (compiler available, kernel not built with Rust)",
-            RustCompat::NotCompatible => "Not compatible",
+    match rust_level {
+        RustLevel::Compatible => {
+            let _ = writeln!(out, "  Compatibility         : Compatible");
         }
-    );
+        RustLevel::Partial => {
+            let _ = writeln!(
+                out,
+                "  Compatibility         : Partially compatible (compiler available, kernel not built with Rust)"
+            );
+        }
+        RustLevel::NotCompatible => {
+            if rust_cfg == ConfigValue::Missing && rust_avail == ConfigValue::Missing {
+                let _ = writeln!(
+                    out,
+                    "  Compatibility         : Not compatible — this kernel was not compiled with Rust support"
+                );
+            } else {
+                let _ = writeln!(out, "  Compatibility         : Not compatible");
+            }
+        }
+    }
 
     let r4l_buildable =
-        rust_level == RustCompat::Compatible && bld.build_dir.is_some() && tools.rustc.is_some();
+        rust_level == RustLevel::Compatible && bld.build_dir.is_some() && tools.rustc.is_some();
     let r4l_msg = if r4l_buildable {
         "yes"
-    } else if rust_level == RustCompat::PartiallyCompatible {
+    } else if rust_level == RustLevel::Partial {
         "no (CONFIG_RUST not enabled)"
+    } else if rust_cfg == ConfigValue::Missing {
+        "no — this kernel was not compiled with Rust support"
     } else {
         "no (see recommendations)"
     };
@@ -163,16 +168,14 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // ---- Module Development -----------------------------------------------
 
     let _ = writeln!(out, "Module Development");
-    print_config(&mut out, "CONFIG_MODULES", cfg, "MODULES");
+    let _ = writeln!(out, "  CONFIG_MODULES      : {}", cv("MODULES").label());
     print_bool_opt(&mut out, "Module signing", mod_info.signing_enabled);
     print_bool(&mut out, "Signing required", mod_info.signing_required);
 
-    // Module compression
-    let compression = detect_module_compression(cfg);
+    let compression = detect_compression(cfg);
     let _ = writeln!(out, "  Module compression  : {compression}");
 
-    // Loadable module support
-    let loadable = config_is(cfg, "MODULES") == Some(true) && mod_info.modules_dir.is_some();
+    let loadable = cv("MODULES").is_enabled() && mod_info.modules_dir.is_some();
     let _ = writeln!(
         out,
         "  Loadable modules    : {}",
@@ -182,7 +185,6 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
             "not supported"
         }
     );
-
     print_kv(
         &mut out,
         "  Modules directory",
@@ -229,166 +231,39 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = writeln!(out);
 
-    // ---- Compatibility Report ---------------------------------------------
+    // ---- Star Score -------------------------------------------------------
 
-    // Collect all boolean checks for scoring
-    struct Check<'a> {
-        category: &'a str,
-        passed: bool,
-    }
-
-    let checks: Vec<Check> = vec![
-        // Environment
-        Check {
-            category: "Environment",
-            passed: release.is_some(),
-        },
-        Check {
-            category: "Environment",
-            passed: arch.is_some(),
-        },
-        Check {
-            category: "Environment",
-            passed: distro.is_some(),
-        },
-        Check {
-            category: "Environment",
-            passed: fs_paths.first().is_some_and(|f| f.passed()),
-        },
-        Check {
-            category: "Environment",
-            passed: fs_paths.get(2).is_some_and(|f| f.passed()),
-        },
-        // Toolchain
-        Check {
-            category: "Rust",
-            passed: tools.rustc.is_some(),
-        },
-        Check {
-            category: "Rust",
-            passed: tools.cargo.is_some(),
-        },
-        Check {
-            category: "Rust",
-            passed: rust_cfg == Some(true) || rust_avail == Some(true),
-        },
-        Check {
-            category: "Rust",
-            passed: tools.bindgen.is_some(),
-        },
-        Check {
-            category: "Rust",
-            passed: rust_level == RustCompat::Compatible,
-        },
-        // Build
-        Check {
-            category: "Headers",
-            passed: mod_info.headers_available,
-        },
-        Check {
-            category: "Build tree",
-            passed: bld.build_dir.is_some(),
-        },
-        Check {
-            category: "Build tree",
-            passed: bld.source_dir.is_some(),
-        },
-        Check {
-            category: "Build tree",
-            passed: bld.module_symvers.is_some(),
-        },
-        Check {
-            category: "Build tree",
-            passed: bld.compile_commands,
-        },
-        // Modules
-        Check {
-            category: "Modules",
-            passed: config_is(cfg, "MODULES") == Some(true),
-        },
-        Check {
-            category: "Modules",
-            passed: mod_info.modules_dir.is_some(),
-        },
-        Check {
-            category: "Modules",
-            passed: loadable,
-        },
-        // Debug
-        Check {
-            category: "BTF",
-            passed: dbg.btf_available,
-        },
-        Check {
-            category: "Debug",
-            passed: ks_info.exists && ks_info.readable,
-        },
-        Check {
-            category: "Debug",
-            passed: debugfs_mounted,
-        },
-    ];
-
-    let total = checks.len() as f64;
-    let passed = checks.iter().filter(|c| c.passed).count() as f64;
-    let pct = (passed / total * 100.0).round() as u32;
-
-    let _ = writeln!(out, "Compatibility Report");
+    let scores = scoring::compute();
+    let _ = writeln!(out, "Readiness Score");
     let _ = writeln!(out);
-
-    let categories: Vec<(&str, bool)> = {
-        let mut seen = std::collections::BTreeMap::new();
-        for c in &checks {
-            let entry = seen.entry(c.category).or_insert(true);
-            *entry = *entry && c.passed;
-        }
-        seen.into_iter().collect()
-    };
-
-    for (cat, ok) in &categories {
-        // Rust category uses three-state display
-        if *cat == "Rust" {
-            match rust_level {
-                RustCompat::Compatible => {
-                    let _ = writeln!(out, "  ✔ Rust");
-                }
-                RustCompat::PartiallyCompatible => {
-                    let _ = writeln!(
-                        out,
-                        "  ~ Rust (partial — compiler available, kernel not built with Rust)"
-                    );
-                }
-                RustCompat::NotCompatible => {
-                    let _ = writeln!(out, "  ✘ Rust");
-                }
-            }
-        } else {
-            let mark = if *ok { "✔" } else { "✘" };
-            let _ = writeln!(out, "  {mark} {cat}");
-        }
+    for s in &scores {
+        let _ = writeln!(out, "  {}  {}", s.render(), s.name);
     }
     let _ = writeln!(out);
-    let _ = writeln!(out, "  Overall readiness : {pct}%");
+    let _ = writeln!(out, "  Overall : {}", scoring::overall_rating(&scores));
     let _ = writeln!(out);
 
-    // ---- Recommendations ----------------------------------------------
+    // ---- Recommendations --------------------------------------------------
 
-    let recs = {
-        let ctx = RecCtx {
-            tools: &tools,
-            bld: &bld,
-            cfg,
-            mod_info: &mod_info,
-            dbg: &dbg,
-        };
-        recommendations(
-            &ctx,
-            debugfs_mounted,
-            tracefs_mounted,
-            release.as_deref(),
-            headers_ver.as_deref(),
-        )
-    };
+    let recs = recommend::generate(&recommend::RecCtx {
+        rustc_installed: tools.rustc.is_some(),
+        bindgen_installed: tools.bindgen.is_some(),
+        llvm_installed: tools.llvm_version.is_some(),
+        headers_available: mod_info.headers_available,
+        build_dir_present: bld.build_dir.is_some(),
+        source_dir_present: bld.source_dir.is_some(),
+        config_rust: rust_cfg,
+        config_rust_available: rust_avail,
+        config_modules: cv("MODULES"),
+        config_btf: cv("DEBUG_INFO_BTF"),
+        btf_available: dbg.btf_available,
+        signing_required: mod_info.signing_required,
+        signing_enabled: mod_info.signing_enabled == Some(true),
+        debugfs_ok: debugfs_mounted,
+        tracefs_ok: tracefs_mounted,
+        release: release.as_deref(),
+        headers_ver: headers_ver.as_deref(),
+    });
 
     if !recs.is_empty() {
         let _ = writeln!(out, "Recommendations");
@@ -458,26 +333,7 @@ fn print_bool_opt(out: &mut io::StdoutLock<'_>, label: &str, val: Option<bool>) 
     }
 }
 
-fn print_config(out: &mut io::StdoutLock<'_>, label: &str, cfg: Option<&str>, key: &str) {
-    match cfg.and_then(|t| config::config_is_set(t, key)) {
-        Some(true) => {
-            let _ = writeln!(out, "  {label:<26} : y");
-        }
-        Some(false) => {
-            let _ = writeln!(out, "  {label:<26} : not set");
-        }
-        None => {
-            let _ = writeln!(out, "  {label:<26} : Unknown");
-        }
-    }
-}
-
-fn config_is(cfg: Option<&str>, key: &str) -> Option<bool> {
-    cfg.and_then(|t| config::config_is_set(t, key))
-}
-
-/// Check whether a path is a mount point by consulting /proc/mounts.
-fn is_mount_point(path: &str) -> bool {
+fn mount_ok(path: &str) -> bool {
     if let Ok(content) = std::fs::read_to_string("/proc/mounts") {
         for line in content.lines() {
             let parts: Vec<&str> = line.split_whitespace().collect();
@@ -489,100 +345,19 @@ fn is_mount_point(path: &str) -> bool {
     false
 }
 
-fn detect_module_compression(cfg: Option<&str>) -> &str {
-    let candidates = [
-        ("MODULE_COMPRESS_ZSTD", "zstd"),
-        ("MODULE_COMPRESS_XZ", "xz"),
-        ("MODULE_COMPRESS_GZIP", "gzip"),
-    ];
-    for (key, name) in &candidates {
-        if config_is(cfg, key) == Some(true) {
-            return name;
-        }
+fn detect_compression(cfg: Option<&str>) -> &str {
+    let cv = |k: &str| cfg.map_or(ConfigValue::Missing, |t| config::config_value(t, k));
+    if cv("MODULE_COMPRESS_ZSTD").is_enabled() {
+        return "zstd";
     }
-    if config_is(cfg, "MODULE_COMPRESS_NONE") == Some(true)
-        || config_is(cfg, "MODULE_COMPRESS") == Some(false)
-    {
+    if cv("MODULE_COMPRESS_XZ").is_enabled() {
+        return "xz";
+    }
+    if cv("MODULE_COMPRESS_GZIP").is_enabled() {
+        return "gzip";
+    }
+    if cv("MODULE_COMPRESS_NONE").is_enabled() || cv("MODULE_COMPRESS") == ConfigValue::No {
         return "none";
     }
     "Unknown"
-}
-
-struct RecCtx<'a> {
-    tools: &'a toolchain::ToolchainInfo,
-    bld: &'a buildenv::BuildEnvInfo,
-    cfg: Option<&'a str>,
-    mod_info: &'a modules::ModuleInfo,
-    dbg: &'a btf::DebugInfo,
-}
-
-fn recommendations(
-    ctx: &RecCtx,
-    debugfs_ok: bool,
-    tracefs_ok: bool,
-    release: Option<&str>,
-    headers_ver: Option<&str>,
-) -> Vec<String> {
-    let mut recs: Vec<String> = Vec::new();
-
-    // Toolchain
-    if ctx.tools.rustc.is_none() {
-        recs.push(
-            "Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh".into(),
-        );
-    }
-    if ctx.tools.bindgen.is_none() {
-        recs.push("Install bindgen: cargo install bindgen-cli".into());
-    }
-    if ctx.tools.llvm_version.is_none() {
-        recs.push("Install LLVM/clang for kernel compilation".into());
-    }
-
-    // Headers
-    if !ctx.mod_info.headers_available {
-        if let (Some(r), Some(h)) = (release, headers_ver)
-            && r != h
-        {
-            recs.push(format!("Reboot into updated kernel ({h})"));
-        }
-        recs.push("Install kernel headers matching running kernel".into());
-    }
-
-    // Build tree
-    if ctx.bld.build_dir.is_none() {
-        recs.push("Install kernel headers to populate /lib/modules/$(uname -r)/build".into());
-    }
-    if ctx.bld.source_dir.is_none() {
-        recs.push(
-            "Install kernel source or create symlink from /lib/modules/$(uname -r)/source".into(),
-        );
-    }
-
-    // Rust-for-Linux
-    if config_is(ctx.cfg, "RUST") != Some(true)
-        && config_is(ctx.cfg, "RUST_IS_AVAILABLE") != Some(true)
-    {
-        recs.push("Enable CONFIG_RUST=y in kernel configuration".into());
-    }
-
-    // Modules
-    if config_is(ctx.cfg, "MODULES") != Some(true) {
-        recs.push("Enable CONFIG_MODULES=y in kernel configuration".into());
-    }
-    if ctx.mod_info.signing_required && ctx.mod_info.signing_enabled != Some(true) {
-        recs.push("Set up module signing keys for kernel module development".into());
-    }
-
-    // Debug
-    if !ctx.dbg.btf_available && config_is(ctx.cfg, "DEBUG_INFO_BTF") != Some(true) {
-        recs.push("Enable CONFIG_DEBUG_INFO_BTF=y for BTF support".into());
-    }
-    if !debugfs_ok {
-        recs.push("Mount debugfs: sudo mount -t debugfs none /sys/kernel/debug".into());
-    }
-    if !tracefs_ok {
-        recs.push("Mount tracefs: sudo mount -t tracefs none /sys/kernel/tracing".into());
-    }
-
-    recs
 }

@@ -38,13 +38,20 @@ pub fn inspect_modules(config: Option<&str>) -> ModuleInfo {
     // Module signing: prefer CONFIG_MODULE_SIG from kernel config;
     // fall back to checking if any loaded module has a signature attribute.
     let signing_enabled = match config {
-        Some(cfg) => super::config::config_is_set(cfg, "MODULE_SIG"),
+        Some(cfg) => {
+            let v = super::config::config_value(cfg, "MODULE_SIG");
+            if v.is_known() {
+                Some(v.is_enabled())
+            } else {
+                check_module_signatures()
+            }
+        }
         None => check_module_signatures(),
     };
 
     // CONFIG_MODULE_SIG_FORCE or /proc/sys/kernel/modules_disabled
     let signing_required = match config {
-        Some(cfg) => super::config::config_is_set(cfg, "MODULE_SIG_FORCE") == Some(true),
+        Some(cfg) => super::config::config_value(cfg, "MODULE_SIG_FORCE").is_enabled(),
         None => check_sig_enforce(),
     };
 

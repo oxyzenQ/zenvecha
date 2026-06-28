@@ -5,9 +5,47 @@
 //!
 //! Reads CONFIG_* values from /boot/config-* then /proc/config.gz (via zcat).
 //! Never panics on missing files or tools.
+//!
+//! All config queries return [`ConfigValue`] — a four-state enum:
+//! `Yes`, `Module`, `No`, `Missing` — no ambiguity, no `Option<bool>`.
 
 use std::path::Path;
 use std::process::Command;
+
+/// The state of a CONFIG_* key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConfigValue {
+    /// `CONFIG_X=y` — compiled in.
+    Yes,
+    /// `CONFIG_X=m` — compiled as a loadable module.
+    Module,
+    /// `# CONFIG_X is not set` — explicitly disabled.
+    No,
+    /// Key not present in the config at all.
+    Missing,
+}
+
+impl ConfigValue {
+    /// True when the feature is available (y or m).
+    pub fn is_enabled(self) -> bool {
+        matches!(self, ConfigValue::Yes | ConfigValue::Module)
+    }
+
+    /// Human-readable label for display.
+    pub fn label(self) -> &'static str {
+        match self {
+            ConfigValue::Yes => "y",
+            ConfigValue::Module => "m",
+            ConfigValue::No => "not set",
+            ConfigValue::Missing => "Unknown",
+        }
+    }
+
+    /// True when we have a definitive answer (not Missing).
+    pub fn is_known(self) -> bool {
+        !matches!(self, ConfigValue::Missing)
+    }
+}
 
 /// Try to load the running kernel's configuration, preferring
 /// /boot/config-`uname -r` then /proc/config.gz via zcat.
@@ -38,29 +76,31 @@ pub fn read_kernel_config() -> Option<(String, String)> {
     None
 }
 
-/// Check whether a kernel config option is enabled.
+/// Look up a CONFIG_* key in the config text.
 ///
-/// Recognises:
-///   CONFIG_X=y          → true
-///   CONFIG_X=m          → true (compiled as module)
-///   # CONFIG_X is not set → false
-///
-/// Returns None when the key is absent from the config text.
-pub fn config_is_set(config: &str, key: &str) -> Option<bool> {
+/// Returns:
+/// - `Yes` for `CONFIG_X=y`
+/// - `Module` for `CONFIG_X=m`
+/// - `No` for `# CONFIG_X is not set`
+/// - `Missing` when the key is absent
+pub fn config_value(config: &str, key: &str) -> ConfigValue {
     let set_prefix = format!("CONFIG_{key}=");
     let unset_prefix = format!("# CONFIG_{key} is not set");
 
     for line in config.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with(&set_prefix) {
-            let value = &trimmed[set_prefix.len()..];
-            return Some(value == "y" || value == "m");
+        if let Some(value) = trimmed.strip_prefix(&set_prefix) {
+            return match value {
+                "y" => ConfigValue::Yes,
+                "m" => ConfigValue::Module,
+                _ => ConfigValue::Missing,
+            };
         }
         if trimmed == unset_prefix.as_str() {
-            return Some(false);
+            return ConfigValue::No;
         }
     }
-    None
+    ConfigValue::Missing
 }
 
 #[cfg(test)]
@@ -68,21 +108,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_config_values() {
-        let sample = "\
-CONFIG_MODULES=y
-CONFIG_BPF=m
-# CONFIG_LIVEPATCH is not set
-CONFIG_KALLSYMS=y
-";
-        assert_eq!(config_is_set(sample, "MODULES"), Some(true));
-        assert_eq!(config_is_set(sample, "BPF"), Some(true)); // =m
-        assert_eq!(config_is_set(sample, "LIVEPATCH"), Some(false));
-        assert_eq!(config_is_set(sample, "RUST"), None);
+    fn parse_yes() {
+        assert_eq!(
+            config_value("CONFIG_MODULES=y\n", "MODULES"),
+            ConfigValue::Yes
+        );
     }
 
     #[test]
-    fn missing_config_not_present() {
-        assert_eq!(config_is_set("", "NOTHING"), None);
+    fn parse_module() {
+        assert_eq!(config_value("CONFIG_BPF=m\n", "BPF"), ConfigValue::Module);
+    }
+
+    #[test]
+    fn parse_no() {
+        assert_eq!(
+            config_value("# CONFIG_LIVEPATCH is not set\n", "LIVEPATCH"),
+            ConfigValue::No
+        );
+    }
+
+    #[test]
+    fn parse_missing() {
+        assert_eq!(config_value("", "NOTHING"), ConfigValue::Missing);
+    }
+
+    #[test]
+    fn enabled_checks() {
+        assert!(ConfigValue::Yes.is_enabled());
+        assert!(ConfigValue::Module.is_enabled());
+        assert!(!ConfigValue::No.is_enabled());
+        assert!(!ConfigValue::Missing.is_enabled());
+    }
+
+    #[test]
+    fn label_output() {
+        assert_eq!(ConfigValue::Yes.label(), "y");
+        assert_eq!(ConfigValue::Module.label(), "m");
+        assert_eq!(ConfigValue::No.label(), "not set");
+        assert_eq!(ConfigValue::Missing.label(), "Unknown");
     }
 }

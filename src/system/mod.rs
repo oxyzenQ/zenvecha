@@ -12,5 +12,7 @@ pub mod fscheck;
 pub mod kallsyms;
 pub mod kernel;
 pub mod modules;
+pub mod recommend;
 pub mod rust;
+pub mod scoring;
 pub mod toolchain;

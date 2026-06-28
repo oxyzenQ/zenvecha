@@ -110,6 +110,29 @@ fn test_analyze_never_panics() {
 }
 
 #[test]
+fn test_inspect_missing_config_handled() {
+    // inspect must handle missing /proc/config.gz gracefully
+    let output = run(&["inspect"]);
+    if let Some(o) = output {
+        assert!(o.status.success());
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        // Should still produce a valid report even with unknown config
+        assert!(stdout.contains("Configuration"));
+    }
+}
+
+#[test]
+fn test_analyze_star_scoring_present() {
+    let output = run(&["analyze"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(stdout.contains("Readiness Score"));
+        assert!(stdout.contains("★") || stdout.contains("☆"));
+        assert!(stdout.contains("Overall"));
+    }
+}
+
+#[test]
 fn test_unknown_command() {
     let output = run(&["nonexistent"]);
     if let Some(o) = output {

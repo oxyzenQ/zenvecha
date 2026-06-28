@@ -2,16 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Inspect command — read-only kernel capability discovery.
-//!
-//! Produces a structured report covering kernel identity, configuration,
-//! module environment, debug info, symbol table, and Rust-for-Linux support.
-//! Never modifies the system.
 
 use std::io::{self, Write};
 
 use crate::system::{btf, config, kallsyms, kernel, modules, rust};
-
-// ---- public API ------------------------------------------------------------
 
 pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let stdout = io::stdout();
@@ -30,12 +24,9 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     let debug = btf::inspect_debug();
     let (rust_cfg, rust_avail) = rust::rust_config(config_text);
 
-    // ---- report -----------------------------------------------------------
-
+    // Kernel identity
     let _ = writeln!(out, "Zenvecha Inspect");
     let _ = writeln!(out);
-
-    // Kernel identity
     let _ = writeln!(out, "Kernel");
     print_kv(&mut out, "  Version", release.as_deref());
     print_kv(&mut out, "  Architecture", arch.as_deref());
@@ -69,18 +60,10 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     ];
     for key in &cfg_keys {
         let label = format!("  CONFIG_{key}");
-        match config_text.and_then(|t| config::config_is_set(t, key)) {
-            Some(true) => {
-                let val = config_val_label(config_text, key);
-                let _ = writeln!(out, "  {label:.<36} {val}");
-            }
-            Some(false) => {
-                let _ = writeln!(out, "  {label:.<36} not set");
-            }
-            None => {
-                let _ = writeln!(out, "  {label:.<36} Unknown");
-            }
-        }
+        let val = config_text.map_or(config::ConfigValue::Missing, |t| {
+            config::config_value(t, key)
+        });
+        let _ = writeln!(out, "  {label:.<36} {}", val.label());
     }
     let _ = writeln!(out);
 
@@ -133,63 +116,57 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     let _ = writeln!(out);
 
-    // ---- capability summary -----------------------------------------------
-
-    let r4l_known = rust_cfg.is_some() || rust_avail.is_some();
-    let r4l_ok = rust_cfg == Some(true) || rust_avail == Some(true);
-
-    let modules_known = config_text
-        .and_then(|t| config::config_is_set(t, "MODULES"))
-        .is_some();
-    let modules_ok = config_text
-        .and_then(|t| config::config_is_set(t, "MODULES"))
-        .unwrap_or(false)
-        && mod_info.headers_available;
+    // Capability summary
+    let r4l_known = rust_cfg.is_known() || rust_avail.is_known();
+    let r4l_ok = rust_cfg.is_enabled() && rust_avail.is_enabled();
 
     let modsig_known = mod_info.signing_enabled.is_some();
     let modsig_ok = mod_info.signing_enabled == Some(true);
 
+    let mod_known = config_text
+        .map(|t| config::config_value(t, "MODULES").is_known())
+        .unwrap_or(false);
+    let mod_ok = config_text
+        .map(|t| config::config_value(t, "MODULES").is_enabled())
+        .unwrap_or(false)
+        && mod_info.headers_available;
+
     let btf_known = config_text
-        .and_then(|t| config::config_is_set(t, "DEBUG_INFO_BTF"))
-        .is_some();
+        .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_known())
+        .unwrap_or(false);
     let btf_ok = config_text
-        .and_then(|t| config::config_is_set(t, "DEBUG_INFO_BTF"))
+        .map(|t| config::config_value(t, "DEBUG_INFO_BTF").is_enabled())
         .unwrap_or(false)
         && debug.btf_available;
 
-    let livepatch_known = config_text
-        .and_then(|t| config::config_is_set(t, "LIVEPATCH"))
-        .is_some();
-    let livepatch_ok = config_text
-        .and_then(|t| config::config_is_set(t, "LIVEPATCH"))
+    let lp_known = config_text
+        .map(|t| config::config_value(t, "LIVEPATCH").is_known())
+        .unwrap_or(false);
+    let lp_ok = config_text
+        .map(|t| config::config_value(t, "LIVEPATCH").is_enabled())
         .unwrap_or(false)
-        && modules_ok;
+        && mod_ok;
 
     let ks_ok = ks_info.exists && ks_info.readable;
-    let ks_known = ks_info.exists;
 
     let _ = writeln!(out, "Kernel Capability Summary");
     let _ = writeln!(out);
-    print_tri_check(&mut out, "Rust for Linux", r4l_ok, r4l_known);
-    print_tri_check(&mut out, "Modules", modules_ok, modules_known);
-    print_tri_check(&mut out, "Module Signing", modsig_ok, modsig_known);
-    print_tri_check(&mut out, "BTF", btf_ok, btf_known);
-    print_tri_check(&mut out, "Livepatch", livepatch_ok, livepatch_known);
-    print_tri_check(&mut out, "Kallsyms", ks_ok, ks_known);
+    print_tri(&mut out, "Rust for Linux", r4l_ok, r4l_known);
+    print_tri(&mut out, "Modules", mod_ok, mod_known);
+    print_tri(&mut out, "Module Signing", modsig_ok, modsig_known);
+    print_tri(&mut out, "BTF", btf_ok, btf_known);
+    print_tri(&mut out, "Livepatch", lp_ok, lp_known);
+    print_tri(&mut out, "Kallsyms", ks_ok, true);
     let _ = writeln!(out);
 
     let _ = writeln!(out, "Suitable for:");
     print_check(
         &mut out,
         "module development",
-        modules_ok && kernel::compiler_available(),
+        mod_ok && kernel::compiler_available(),
     );
     print_check(&mut out, "symbol analysis", ks_ok);
-    print_check(
-        &mut out,
-        "live patching",
-        livepatch_ok && ks_ok && modules_ok,
-    );
+    print_check(&mut out, "live patching", lp_ok && ks_ok && mod_ok);
 
     Ok(())
 }
@@ -234,33 +211,12 @@ fn print_check(out: &mut io::StdoutLock<'_>, label: &str, ok: bool) {
     let _ = writeln!(out, "  {mark} {label}");
 }
 
-/// Three-state check: ✔ available, ✘ unavailable, ? unknown.
-fn print_tri_check(out: &mut io::StdoutLock<'_>, label: &str, ok: bool, known: bool) {
+fn print_tri(out: &mut io::StdoutLock<'_>, label: &str, ok: bool, known: bool) {
     if !known {
         let _ = writeln!(out, "  ? {label}");
     } else if ok {
         let _ = writeln!(out, "  ✔ {label}");
     } else {
         let _ = writeln!(out, "  ✘ {label}");
-    }
-}
-
-fn config_val_label<'a>(config_text: Option<&str>, key: &str) -> &'a str {
-    match config_text.and_then(|t| config::config_is_set(t, key)) {
-        Some(true) => {
-            if let Some(t) = config_text {
-                for line in t.lines() {
-                    let trimmed = line.trim();
-                    if trimmed == format!("CONFIG_{key}=m") {
-                        return "m";
-                    }
-                    if trimmed == format!("CONFIG_{key}=y") {
-                        return "y";
-                    }
-                }
-            }
-            "y"
-        }
-        _ => "y",
     }
 }
