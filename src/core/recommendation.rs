@@ -6,7 +6,8 @@
 //! Recommendations are derived exclusively from Evidence. No duplicated
 //! logic inside commands. Max 10 recommendations.
 
-use super::evidence::{Evidence, EvidenceValue};
+use super::evidence::Evidence;
+use super::evidence_helpers;
 
 /// Generate prioritized recommendations from evidence.
 pub fn recommend(evidence: &[Evidence]) -> Vec<String> {
@@ -15,11 +16,11 @@ pub fn recommend(evidence: &[Evidence]) -> Vec<String> {
     // --- environment first (highest impact) --------------------------------
 
     // Header mismatch → reboot or install
-    let headers_complete = ev_status_is(evidence, "build.headers", "Complete");
-    let headers_partial = ev_status_is(evidence, "build.headers", "Partial");
-    let build_dir = ev_text_known(evidence, "build.dir");
-    let source_dir = ev_text_known(evidence, "build.source");
-    let release = ev_text(evidence, "kernel.release");
+    let headers_complete = evidence_helpers::ev_status_is(evidence, "build.headers", "Complete");
+    let headers_partial = evidence_helpers::ev_status_is(evidence, "build.headers", "Partial");
+    let build_dir = evidence_helpers::ev_text_known(evidence, "build.dir");
+    let source_dir = evidence_helpers::ev_text_known(evidence, "build.source");
+    let release = evidence_helpers::ev_text_value(evidence, "kernel.release");
 
     if !headers_complete {
         // If headers are present but wrong version → reboot
@@ -44,11 +45,11 @@ pub fn recommend(evidence: &[Evidence]) -> Vec<String> {
 
     // --- toolchain ----------------------------------------------------------
 
-    let rustc = ev_bool(evidence, "toolchain.rustc");
-    let bindgen = ev_bool(evidence, "toolchain.bindgen");
-    let llvm = ev_bool(evidence, "toolchain.llvm");
-    let config_rust = ev_bool(evidence, "config.RUST");
-    let rust_avail = ev_bool(evidence, "config.RUST_IS_AVAILABLE");
+    let rustc = evidence_helpers::ev_bool(evidence, "toolchain.rustc");
+    let bindgen = evidence_helpers::ev_bool(evidence, "toolchain.bindgen");
+    let llvm = evidence_helpers::ev_bool(evidence, "toolchain.llvm");
+    let config_rust = evidence_helpers::ev_bool(evidence, "config.RUST");
+    let rust_avail = evidence_helpers::ev_bool(evidence, "config.RUST_IS_AVAILABLE");
 
     if !rustc {
         recs.push(
@@ -73,21 +74,22 @@ pub fn recommend(evidence: &[Evidence]) -> Vec<String> {
 
     // --- modules ------------------------------------------------------------
 
-    if !ev_bool(evidence, "config.MODULES") {
+    if !evidence_helpers::ev_bool(evidence, "config.MODULES") {
         recs.push("Enable CONFIG_MODULES=y in kernel configuration".into());
     }
 
-    let signing_req = ev_text(evidence, "modules.loader").is_some_and(|t| t.contains("signed=yes"));
-    if !signing_req && ev_bool(evidence, "config.MODULES") {
+    let signing_req = evidence_helpers::ev_text_value(evidence, "modules.loader")
+        .is_some_and(|t| t.contains("signed=yes"));
+    if !signing_req && evidence_helpers::ev_bool(evidence, "config.MODULES") {
         recs.push("Set up module signing keys for kernel module development".into());
     }
 
     // --- debug --------------------------------------------------------------
 
-    if !ev_bool(evidence, "fs.debugfs") {
+    if !evidence_helpers::ev_bool(evidence, "fs.debugfs") {
         recs.push("Mount debugfs: mount -t debugfs none /sys/kernel/debug".into());
     }
-    if !ev_bool(evidence, "fs.tracefs") {
+    if !evidence_helpers::ev_bool(evidence, "fs.tracefs") {
         recs.push("Mount tracefs: mount -t tracefs none /sys/kernel/tracing".into());
     }
 
@@ -97,45 +99,3 @@ pub fn recommend(evidence: &[Evidence]) -> Vec<String> {
 }
 
 /* ---------- helpers -------------------------------------------------------- */
-
-fn ev_bool(evidence: &[Evidence], id: &str) -> bool {
-    evidence
-        .iter()
-        .find(|e| e.id == id)
-        .is_some_and(|e| match &e.value {
-            EvidenceValue::Bool(b) => *b,
-            EvidenceValue::Config(cv) => cv.is_enabled(),
-            EvidenceValue::Count(n) => *n > 0,
-            _ => false,
-        })
-}
-
-fn ev_text(evidence: &[Evidence], id: &str) -> Option<String> {
-    evidence
-        .iter()
-        .find(|e| e.id == id)
-        .and_then(|e| match &e.value {
-            EvidenceValue::Text(Some(s)) => Some(s.clone()),
-            EvidenceValue::Literal(s) => Some(s.clone()),
-            _ => None,
-        })
-}
-
-fn ev_text_known(evidence: &[Evidence], id: &str) -> bool {
-    evidence.iter().find(|e| e.id == id).is_some_and(|e| {
-        matches!(
-            &e.value,
-            EvidenceValue::Text(Some(_)) | EvidenceValue::Path(Some(_))
-        )
-    })
-}
-
-fn ev_status_is(evidence: &[Evidence], id: &str, expected: &str) -> bool {
-    evidence
-        .iter()
-        .find(|e| e.id == id)
-        .is_some_and(|e| match &e.value {
-            EvidenceValue::Status(s) => *s == expected,
-            _ => false,
-        })
-}

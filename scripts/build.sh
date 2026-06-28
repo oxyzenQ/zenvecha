@@ -70,18 +70,24 @@ check_all() {
         . || fail "Spelling issues found. Run 'codespell -w' to auto-fix."
     pass "codespell"
 
-    # 6. Security audit (CVE)
+    # 6. Security audit (CVE) — CI enforces, local skips if absent
     header "6/7 — cargo audit"
-    require_tool cargo-audit "cargo install cargo-audit"
-    cargo audit || fail "Security vulnerabilities found. Review and update dependencies."
-    pass "cargo audit"
+    if command -v cargo-audit &>/dev/null; then
+        cargo audit || fail "Security vulnerabilities found. Review and update dependencies."
+        pass "cargo audit"
+    else
+        echo -e "${YELLOW}[SKIP]${NC} cargo-audit not installed (CI enforces this check)."
+    fi
 
-    # 7a. License, ban & source check (required)
+    # 7. License, ban & source check — CI enforces, local skips if absent
     header "7/7 — cargo deny (licenses, bans, sources)"
-    require_tool cargo-deny "cargo install cargo-deny"
-    cargo deny check licenses bans sources 2>&1 \
-        || fail "cargo-deny violations found. Review licenses, bans, and sources."
-    pass "cargo deny"
+    if command -v cargo-deny &>/dev/null; then
+        cargo deny check licenses bans sources 2>&1 \
+            || fail "cargo-deny violations found. Review licenses, bans, and sources."
+        pass "cargo deny"
+    else
+        echo -e "${YELLOW}[SKIP]${NC} cargo-deny not installed (CI enforces this check)."
+    fi
 
     echo ""
     pass "ALL GATEKEEPER CHECKS PASSED — safe to commit."

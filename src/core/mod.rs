@@ -12,5 +12,8 @@ pub mod analysis;
 pub mod capability;
 pub mod caps;
 pub mod evidence;
+pub mod evidence_helpers;
+pub mod pipeline;
 pub mod recommendation;
+pub mod render;
 pub mod rendering;
