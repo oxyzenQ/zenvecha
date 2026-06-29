@@ -203,3 +203,27 @@ fn test_unknown_command() {
         assert!(stderr.contains("unknown command"));
     }
 }
+
+#[test]
+fn test_patch_status_runs() {
+    let output = run(&["patch", "status"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(
+            stdout.contains("Zenvecha Livepatch") || stdout.contains("NOT LOADED"),
+            "patch status should produce output even without kernel module"
+        );
+    }
+}
+
+#[test]
+fn test_patch_dry_run_runs() {
+    let output = run(&["patch", "dry-run"]);
+    if let Some(o) = output {
+        let stdout = String::from_utf8_lossy(&o.stdout);
+        assert!(
+            stdout.contains("Dry Run"),
+            "patch dry-run should produce validation output"
+        );
+    }
+}

@@ -11,4 +11,5 @@
 //! The module NEVER decides what to patch — userspace owns the decision.
 //! The module ONLY provides atomic execution and status reporting.
 
+pub mod dummy_target;
 pub mod executor;

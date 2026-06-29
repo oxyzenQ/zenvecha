@@ -29,6 +29,7 @@ pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {
         "analyze" => crate::commands::analyze::run()?,
         "abi" => crate::commands::abi::run()?,
         "report" => crate::commands::report::run(&args)?,
+        "patch" => crate::commands::patch::run(&args)?,
         _ => {
             eprintln!("zenvecha: unknown command '{}'", args[1]);
             print_usage();
