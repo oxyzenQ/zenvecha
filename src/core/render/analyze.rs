@@ -15,6 +15,7 @@ use crate::core::evidence::Evidence;
 use crate::core::evidence_helpers;
 use crate::core::knowledge::resolver::KnowledgeResult;
 use crate::core::knowledge::rules::RuleImpact;
+use crate::core::reasoning::model::ReasoningResult;
 
 /// Pre-computed models for rendering.
 pub struct AnalyzeModels<'a> {
@@ -24,6 +25,7 @@ pub struct AnalyzeModels<'a> {
     pub decision_plan: &'a DecisionPlan,
     pub prediction: &'a PredictionResult,
     pub knowledge: &'a KnowledgeResult,
+    pub reasoning: &'a ReasoningResult,
     pub recs: &'a [String],
 }
 
@@ -38,6 +40,7 @@ pub fn render(
     let decision_plan = models.decision_plan;
     let prediction = models.prediction;
     let knowledge = models.knowledge;
+    let reasoning = models.reasoning;
     let recs = models.recs;
     writeln!(out, "Zenvecha Analyze")?;
     writeln!(out)?;
@@ -277,6 +280,58 @@ pub fn render(
                 rule.category.label(),
                 rule.description
             )?;
+        }
+        writeln!(out)?;
+    }
+
+    // ── Reasoning ──
+    writeln!(out, "Reasoning")?;
+    writeln!(out)?;
+
+    // System narrative
+    writeln!(out, "  {}", reasoning.system_narrative)?;
+    writeln!(out)?;
+
+    // Readiness reason
+    writeln!(out, "  Why {}", reasoning.readiness_reason.conclusion)?;
+    writeln!(out)?;
+    for line in &reasoning.readiness_reason.because {
+        writeln!(out, "    • {line}")?;
+    }
+    writeln!(
+        out,
+        "    Confidence: {}",
+        reasoning.readiness_reason.confidence_reason
+    )?;
+    writeln!(out)?;
+
+    // Decision reason
+    if let Some(ref decision) = reasoning.decision_reason {
+        writeln!(out, "  Decision")?;
+        writeln!(out, "    → {}", decision.conclusion)?;
+        writeln!(out)?;
+        for line in &decision.because {
+            writeln!(out, "    Why: {line}")?;
+        }
+        if !decision.supporting_evidence.is_empty() {
+            writeln!(out, "    Evidence:")?;
+            for ev in &decision.supporting_evidence {
+                writeln!(out, "      • {} → {}", ev.label, ev.value)?;
+            }
+        }
+        writeln!(out, "    Confidence: {}", decision.confidence_reason)?;
+        writeln!(out)?;
+    }
+
+    // Blocking reasons
+    if !reasoning.blocking_reasons.is_empty() {
+        writeln!(out, "  Blocking Issues")?;
+        writeln!(out)?;
+        for block in &reasoning.blocking_reasons {
+            writeln!(out, "    ✘ {}", block.conclusion)?;
+            for ev in &block.supporting_evidence {
+                writeln!(out, "      Evidence: {} → {}", ev.label, ev.value)?;
+            }
         }
         writeln!(out)?;
     }

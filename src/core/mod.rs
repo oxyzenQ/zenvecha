@@ -15,6 +15,7 @@ pub mod evidence;
 pub mod evidence_helpers;
 pub mod knowledge;
 pub mod pipeline;
+pub mod reasoning;
 pub mod recommendation;
 pub mod render;
 pub mod rendering;
