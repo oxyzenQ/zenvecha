@@ -149,4 +149,13 @@ pub fn register_all(reg: &mut Registry) {
     // Filesystem
     reg.register(Box::new(caps::DebugfsMounted));
     reg.register(Box::new(caps::TracefsMounted));
+
+    // Kernel module capability bridge (Phase 7)
+    reg.register(Box::new(caps::kernel_cap::KernelModuleStatus));
+    reg.register(Box::new(caps::kernel_cap::KernelVersionFromModule));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolCount));
+    reg.register(Box::new(caps::kernel_cap::KernelBtfStatus));
+    reg.register(Box::new(caps::kernel_cap::KernelModuleLoader));
+    reg.register(Box::new(caps::kernel_cap::KernelTracingFtrace));
+    reg.register(Box::new(caps::kernel_cap::KernelTracingKprobes));
 }
