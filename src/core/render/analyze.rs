@@ -7,7 +7,9 @@
 
 use std::io::{self, Write};
 
-use crate::core::analysis::{CategoryScore, Compatibility, ComponentScore, Readiness};
+use crate::core::analysis::{
+    ActionPriority, CategoryScore, Compatibility, ComponentScore, DecisionPlan, Readiness,
+};
 use crate::core::evidence::Evidence;
 use crate::core::evidence_helpers;
 
@@ -16,6 +18,7 @@ pub fn render(
     evidence: &[Evidence],
     readiness: &Readiness,
     compatibility: &Compatibility,
+    decision_plan: &DecisionPlan,
     recs: &[String],
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -78,6 +81,84 @@ pub fn render(
         writeln!(out, "  No fixes required")?;
     }
     writeln!(out)?;
+
+    // ── Decision Plan ──
+    writeln!(out, "Decision Plan")?;
+    writeln!(out)?;
+
+    // Current → Expected
+    writeln!(out, "  Current Score      {}%", decision_plan.current_score)?;
+    writeln!(
+        out,
+        "  Expected after fix  {}%  (+{}%)",
+        decision_plan.expected_score,
+        decision_plan
+            .expected_score
+            .saturating_sub(decision_plan.current_score)
+    )?;
+    writeln!(
+        out,
+        "  Confidence          {}",
+        decision_plan.confidence.label()
+    )?;
+    writeln!(out)?;
+
+    // Highest ROI action
+    if let Some(ref action) = decision_plan.highest_roi_action {
+        writeln!(out, "  Highest ROI Action")?;
+        writeln!(out)?;
+        writeln!(out, "    → {}", action.title)?;
+        writeln!(out, "    Why    : {}", action.why)?;
+        writeln!(
+            out,
+            "    Gain   : +{}%  |  Time : {} min  |  ROI : {:.2}/min",
+            action.expected_score_gain, action.estimated_minutes, action.roi
+        )?;
+        writeln!(out, "    Effort : {}", action.difficulty.label())?;
+        if !action.alternatives.is_empty() {
+            writeln!(out, "    Alternatives:")?;
+            for alt in &action.alternatives {
+                writeln!(out, "      • {alt}")?;
+            }
+        }
+        writeln!(out)?;
+    }
+
+    // Ranked actions summary
+    if decision_plan.ranked_actions.len() > 1 {
+        writeln!(out, "  Action Queue")?;
+        writeln!(out)?;
+        for action in &decision_plan.ranked_actions {
+            let pfx = action_priority_icon(action.priority);
+            writeln!(
+                out,
+                "  {pfx} +{}%  {:<6}  {} min  {}",
+                action.expected_score_gain,
+                action.priority.label(),
+                action.estimated_minutes,
+                action.title
+            )?;
+        }
+        writeln!(out)?;
+    }
+
+    // Blocking issues
+    if !decision_plan.blocking_issues.is_empty() {
+        writeln!(out, "  Blocking")?;
+        for issue in &decision_plan.blocking_issues {
+            writeln!(out, "    ✘ {issue}")?;
+        }
+        writeln!(out)?;
+    }
+
+    // Opportunities
+    if !decision_plan.opportunities.is_empty() {
+        writeln!(out, "  Opportunities")?;
+        for opp in &decision_plan.opportunities {
+            writeln!(out, "    ◉ {opp}")?;
+        }
+        writeln!(out)?;
+    }
 
     // ── Build Environment ──
     writeln!(out, "Build Environment")?;
@@ -289,5 +370,14 @@ fn component_icon(comp: &ComponentScore) -> &'static str {
         crate::core::analysis::ComponentStatus::Partial => "~",
         crate::core::analysis::ComponentStatus::Missing => "✗",
         crate::core::analysis::ComponentStatus::Blocking => "✘",
+    }
+}
+
+fn action_priority_icon(priority: ActionPriority) -> &'static str {
+    match priority {
+        ActionPriority::Critical => "🔴",
+        ActionPriority::High => "🟡",
+        ActionPriority::Medium => "🟢",
+        ActionPriority::Low => "⚪",
     }
 }

@@ -12,6 +12,7 @@
 //!   compatibility.rs → compatibility assessment (extensible)
 
 pub mod compatibility;
+pub mod decision;
 pub mod readiness;
 pub mod risk;
 
@@ -21,6 +22,10 @@ use crate::core::evidence::Evidence;
 pub use compatibility::{
     BlockingIssue, Compatibility, ComponentScore, ComponentStatus, Confidence, RecommendedAction,
     RiskLevel, assess,
+};
+pub use decision::{
+    ActionPriority, Confidence as DecisionConfidence, DecisionAction, DecisionPlan, Difficulty,
+    evaluate,
 };
 pub use readiness::{CategoryScore, Readiness};
 pub use risk::Risk;
