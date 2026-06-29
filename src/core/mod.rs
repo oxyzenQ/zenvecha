@@ -19,3 +19,4 @@ pub mod reasoning;
 pub mod recommendation;
 pub mod render;
 pub mod rendering;
+pub mod semantic;

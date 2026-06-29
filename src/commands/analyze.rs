@@ -1,7 +1,7 @@
 // Copyright (C) 2026 rezky_nightky
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Analyze command — development readiness assessment with full explainability.
+//! Analyze command — development readiness assessment with full intelligence.
 //!
 //! Orchestration only. Delegates to pipeline and render layer.
 
@@ -24,6 +24,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         prediction: &result.prediction,
         knowledge: &result.knowledge,
         reasoning: &result.reasoning,
+        semantic: &result.semantic_descriptors,
         recs: &result.recommendations,
     };
 

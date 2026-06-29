@@ -16,6 +16,7 @@ use crate::core::evidence_helpers;
 use crate::core::knowledge::resolver::KnowledgeResult;
 use crate::core::knowledge::rules::RuleImpact;
 use crate::core::reasoning::model::ReasoningResult;
+use crate::core::semantic::model::SemanticDescriptor;
 
 /// Pre-computed models for rendering.
 pub struct AnalyzeModels<'a> {
@@ -27,6 +28,7 @@ pub struct AnalyzeModels<'a> {
     pub knowledge: &'a KnowledgeResult,
     pub reasoning: &'a ReasoningResult,
     pub recs: &'a [String],
+    pub semantic: &'a [SemanticDescriptor],
 }
 
 /// Render analyze output from pre-computed models.
@@ -41,8 +43,20 @@ pub fn render(
     let prediction = models.prediction;
     let knowledge = models.knowledge;
     let reasoning = models.reasoning;
+    let semantic = models.semantic;
     let recs = models.recs;
     writeln!(out, "Zenvecha Analyze")?;
+    writeln!(out)?;
+
+    // ── Semantic Profile ──
+    if !semantic.is_empty() {
+        writeln!(out, "Semantic Profile")?;
+        writeln!(out)?;
+        for d in semantic {
+            writeln!(out, "  {}: {}", d.domain.label(), d.state.label())?;
+        }
+        writeln!(out)?;
+    }
     writeln!(out)?;
 
     // ── Compatibility Score ──

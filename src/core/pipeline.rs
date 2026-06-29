@@ -14,6 +14,8 @@ use crate::core::knowledge::resolver::{KnowledgeResult, resolve};
 use crate::core::reasoning::builder::build_reasoning;
 use crate::core::reasoning::model::ReasoningResult;
 use crate::core::recommendation;
+use crate::core::semantic::model::SemanticDescriptor;
+use crate::core::semantic::normalize;
 
 /// Result of running the full pipeline with reasoning.
 pub struct AnalysisResult {
@@ -26,6 +28,7 @@ pub struct AnalysisResult {
     pub knowledge: KnowledgeResult,
     pub reasoning: ReasoningResult,
     pub recommendations: Vec<String>,
+    pub semantic_descriptors: Vec<SemanticDescriptor>,
 }
 
 /// Run the full pipeline.
@@ -44,6 +47,7 @@ pub fn run_analysis_pipeline() -> AnalysisResult {
         &prediction,
         &knowledge,
     );
+    let semantic_descriptors = normalize::normalize(&evidence);
     let recommendations = recommendation::recommend(&evidence);
     AnalysisResult {
         evidence,
@@ -55,6 +59,7 @@ pub fn run_analysis_pipeline() -> AnalysisResult {
         knowledge,
         reasoning,
         recommendations,
+        semantic_descriptors,
     }
 }
 
