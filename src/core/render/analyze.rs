@@ -13,17 +13,32 @@ use crate::core::analysis::{
 };
 use crate::core::evidence::Evidence;
 use crate::core::evidence_helpers;
+use crate::core::knowledge::resolver::KnowledgeResult;
+use crate::core::knowledge::rules::RuleImpact;
+
+/// Pre-computed models for rendering.
+pub struct AnalyzeModels<'a> {
+    pub evidence: &'a [Evidence],
+    pub readiness: &'a Readiness,
+    pub compatibility: &'a Compatibility,
+    pub decision_plan: &'a DecisionPlan,
+    pub prediction: &'a PredictionResult,
+    pub knowledge: &'a KnowledgeResult,
+    pub recs: &'a [String],
+}
 
 /// Render analyze output from pre-computed models.
 pub fn render(
-    evidence: &[Evidence],
-    readiness: &Readiness,
-    compatibility: &Compatibility,
-    decision_plan: &DecisionPlan,
-    prediction: &PredictionResult,
-    recs: &[String],
+    models: &AnalyzeModels<'_>,
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let evidence = models.evidence;
+    let readiness = models.readiness;
+    let compatibility = models.compatibility;
+    let decision_plan = models.decision_plan;
+    let prediction = models.prediction;
+    let knowledge = models.knowledge;
+    let recs = models.recs;
     writeln!(out, "Zenvecha Analyze")?;
     writeln!(out)?;
 
@@ -208,6 +223,60 @@ pub fn render(
             for warn in &scenario.warnings {
                 writeln!(out, "    ⚠ {warn}")?;
             }
+        }
+        writeln!(out)?;
+    }
+
+    // ── Knowledge ──
+    writeln!(out, "Kernel Intelligence")?;
+    writeln!(out)?;
+
+    if let Some(ref ver) = knowledge.kernel_version {
+        writeln!(
+            out,
+            "  Detected  Linux {}.{}.{}",
+            ver.major, ver.minor, ver.patch
+        )?;
+    }
+    writeln!(
+        out,
+        "  Rules     {} evaluated, {} matched",
+        knowledge.total_rules_evaluated, knowledge.total_rules_matched
+    )?;
+    writeln!(out)?;
+
+    // Insights
+    if !knowledge.insights.is_empty() {
+        for insight in &knowledge.insights {
+            writeln!(out, "  ◉ {insight}")?;
+        }
+        writeln!(out)?;
+    }
+
+    // Matched rules (top 5 by impact)
+    if !knowledge.matched_rules.is_empty() {
+        let mut sorted: Vec<_> = knowledge.matched_rules.iter().collect();
+        sorted.sort_by_key(|r| match r.impact {
+            RuleImpact::Critical => 0,
+            RuleImpact::Important => 1,
+            RuleImpact::Notable => 2,
+            RuleImpact::Informational => 3,
+        });
+        writeln!(out, "  Matched Rules")?;
+        writeln!(out)?;
+        for rule in sorted.iter().take(5) {
+            let icon = match rule.impact {
+                RuleImpact::Critical => "🔴",
+                RuleImpact::Important => "🟡",
+                RuleImpact::Notable => "🟢",
+                RuleImpact::Informational => "⚪",
+            };
+            writeln!(
+                out,
+                "  {icon} [{}] {}",
+                rule.category.label(),
+                rule.description
+            )?;
         }
         writeln!(out)?;
     }
