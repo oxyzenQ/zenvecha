@@ -127,6 +127,7 @@ pub(crate) fn validate_framework_usage() {
 // ============================================================================
 
 pub mod btf;
+pub mod graph;
 pub mod loader;
 pub mod module;
 pub mod symbols;
