@@ -13,6 +13,7 @@
 
 pub mod compatibility;
 pub mod decision;
+pub mod prediction;
 pub mod readiness;
 pub mod risk;
 
@@ -27,6 +28,7 @@ pub use decision::{
     ActionPriority, Confidence as DecisionConfidence, DecisionAction, DecisionPlan, Difficulty,
     evaluate,
 };
+pub use prediction::{PredictedRisk, PredictionConfidence, PredictionResult, Scenario, simulate};
 pub use readiness::{CategoryScore, Readiness};
 pub use risk::Risk;
 

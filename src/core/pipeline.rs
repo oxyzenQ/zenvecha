@@ -3,31 +3,34 @@
 
 //! Wolfzenix pipeline — explicit orchestration.
 //!
-//! Central flow: collect → Evidence → Analysis → Decision → Recommend → Render.
+//! Central flow: collect → Evidence → Analysis → Compatibility →
+//! Decision → Prediction → Recommend → Render.
 //! No business logic outside this pipeline.
 
-use crate::core::analysis::{self, Compatibility, DecisionPlan, Readiness, Risk};
+use crate::core::analysis::{self, Compatibility, DecisionPlan, PredictionResult, Readiness, Risk};
 use crate::core::capability::Registry;
 use crate::core::evidence::Evidence;
 use crate::core::recommendation;
 
-/// Result of running the full analysis + decision pipeline.
+/// Result of running the full analysis + decision + prediction pipeline.
 pub struct AnalysisResult {
     pub evidence: Vec<Evidence>,
     pub readiness: Readiness,
     pub risks: Vec<Risk>,
     pub compatibility: Compatibility,
     pub decision_plan: DecisionPlan,
+    pub prediction: PredictionResult,
     pub recommendations: Vec<String>,
 }
 
-/// Run the full pipeline: collect → analyze → compatibility → decision → recommend.
+/// Run the full pipeline: collect → analyze → compatibility → decision → predict → recommend.
 pub fn run_analysis_pipeline() -> AnalysisResult {
     let reg = Registry::default();
     let evidence = reg.run_all();
     let (readiness, risks) = analysis::analyze(&evidence);
     let compatibility = analysis::compatibility::assess(&evidence);
     let decision_plan = analysis::decision::evaluate(&evidence, &compatibility);
+    let prediction = analysis::prediction::simulate(&evidence, &compatibility, &decision_plan);
     let recommendations = recommendation::recommend(&evidence);
     AnalysisResult {
         evidence,
@@ -35,6 +38,7 @@ pub fn run_analysis_pipeline() -> AnalysisResult {
         risks,
         compatibility,
         decision_plan,
+        prediction,
         recommendations,
     }
 }

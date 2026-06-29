@@ -1,7 +1,7 @@
 // Copyright (C) 2026 rezky_nightky
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Analyze command — development readiness assessment with decision guidance.
+//! Analyze command — development readiness assessment with decision + prediction.
 //!
 //! Orchestration only. Delegates to pipeline and render layer.
 
@@ -20,6 +20,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
         &result.readiness,
         &result.compatibility,
         &result.decision_plan,
+        &result.prediction,
         &result.recommendations,
         &mut out,
     )

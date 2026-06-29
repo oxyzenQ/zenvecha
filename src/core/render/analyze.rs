@@ -8,7 +8,8 @@
 use std::io::{self, Write};
 
 use crate::core::analysis::{
-    ActionPriority, CategoryScore, Compatibility, ComponentScore, DecisionPlan, Readiness,
+    ActionPriority, CategoryScore, Compatibility, ComponentScore, DecisionPlan, PredictionResult,
+    Readiness,
 };
 use crate::core::evidence::Evidence;
 use crate::core::evidence_helpers;
@@ -19,6 +20,7 @@ pub fn render(
     readiness: &Readiness,
     compatibility: &Compatibility,
     decision_plan: &DecisionPlan,
+    prediction: &PredictionResult,
     recs: &[String],
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -156,6 +158,56 @@ pub fn render(
         writeln!(out, "  Opportunities")?;
         for opp in &decision_plan.opportunities {
             writeln!(out, "    ◉ {opp}")?;
+        }
+        writeln!(out)?;
+    }
+
+    // ── Prediction ──
+    writeln!(out, "Prediction")?;
+    writeln!(out)?;
+    writeln!(out, "  Current  {}%", prediction.current_score)?;
+    writeln!(out)?;
+
+    for (i, scenario) in prediction.scenarios.iter().take(3).enumerate() {
+        writeln!(out, "  Scenario {}", i + 1)?;
+        writeln!(out)?;
+        writeln!(out, "    {}", scenario.action)?;
+        writeln!(out)?;
+        let delta = if scenario.score_delta >= 0 {
+            format!("+{}%", scenario.score_delta)
+        } else {
+            format!("{}%", scenario.score_delta)
+        };
+        writeln!(
+            out,
+            "    Expected  {}%  ({})",
+            scenario.expected_score, delta
+        )?;
+        writeln!(
+            out,
+            "    Risk      {}  |  Build success  {}%",
+            scenario.expected_risk.label(),
+            scenario.expected_build_success
+        )?;
+        writeln!(
+            out,
+            "    Time      {} min  |  Confidence     {}%",
+            scenario.estimated_minutes,
+            scenario.confidence.percentage()
+        )?;
+        if scenario.requires_reboot {
+            writeln!(out, "    Reboot    required")?;
+        }
+        if !scenario.unlocked_capabilities.is_empty() {
+            writeln!(out, "    Unlocks")?;
+            for cap in &scenario.unlocked_capabilities {
+                writeln!(out, "      ✓ {cap}")?;
+            }
+        }
+        if !scenario.warnings.is_empty() {
+            for warn in &scenario.warnings {
+                writeln!(out, "    ⚠ {warn}")?;
+            }
         }
         writeln!(out)?;
     }
