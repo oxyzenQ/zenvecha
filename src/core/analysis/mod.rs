@@ -18,6 +18,10 @@ pub mod risk;
 use crate::core::evidence::Evidence;
 
 // Re-export public types for backward compatibility.
+pub use compatibility::{
+    BlockingIssue, Compatibility, ComponentScore, ComponentStatus, Confidence, RecommendedAction,
+    RiskLevel, assess,
+};
 pub use readiness::{CategoryScore, Readiness};
 pub use risk::Risk;
 

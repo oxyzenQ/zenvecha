@@ -3,12 +3,11 @@
 
 //! Analyze renderer — formats development readiness assessment output.
 //!
-//! Accepts already-computed Readiness, risks, and recommendations.
-//! Never inspects the system. Only formatting.
+//! Accepts pre-computed models. Never inspects the system. Only formatting.
 
 use std::io::{self, Write};
 
-use crate::core::analysis::{CategoryScore, Readiness};
+use crate::core::analysis::{CategoryScore, Compatibility, ComponentScore, Readiness};
 use crate::core::evidence::Evidence;
 use crate::core::evidence_helpers;
 
@@ -16,13 +15,71 @@ use crate::core::evidence_helpers;
 pub fn render(
     evidence: &[Evidence],
     readiness: &Readiness,
+    compatibility: &Compatibility,
     recs: &[String],
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     writeln!(out, "Zenvecha Analyze")?;
     writeln!(out)?;
 
-    // Build Environment
+    // ── Compatibility Score ──
+    writeln!(out, "Compatibility Score")?;
+    writeln!(out)?;
+    let bar = score_bar(compatibility.score);
+    writeln!(out, "  {}  {}%", bar, compatibility.score)?;
+    writeln!(out, "  Level      : {}", compatibility.level)?;
+    writeln!(out, "  Confidence  : {}", compatibility.confidence.label())?;
+    writeln!(out, "  Risk        : {}", compatibility.risk.label())?;
+    if compatibility.blocking_issues.is_empty() {
+        writeln!(out, "  Blocking    : none")?;
+    } else {
+        writeln!(
+            out,
+            "  Blocking    : {} issue(s)",
+            compatibility.blocking_issues.len()
+        )?;
+    }
+    writeln!(out)?;
+
+    // Per-component scores
+    writeln!(out, "Component Scores")?;
+    writeln!(out)?;
+    for comp in &compatibility.components {
+        let icon = component_icon(comp);
+        writeln!(out, "  {icon} {:<28} {:>3}%", comp.name, comp.score)?;
+        writeln!(out, "    {}", comp.detail)?;
+    }
+    writeln!(out)?;
+
+    // Blocking issues
+    if !compatibility.blocking_issues.is_empty() {
+        writeln!(out, "Blocking Issues")?;
+        writeln!(out)?;
+        for issue in &compatibility.blocking_issues {
+            writeln!(out, "  ✘ {}: {}", issue.component, issue.description)?;
+        }
+        writeln!(out)?;
+    }
+
+    // Next best action
+    writeln!(out, "Next Best Action")?;
+    writeln!(out)?;
+    writeln!(out, "  {}", compatibility.next_best_action)?;
+    writeln!(out)?;
+
+    // Estimated fix time
+    if compatibility.estimated_fix_minutes > 0 {
+        writeln!(
+            out,
+            "  Estimated fix time : ~{} min",
+            compatibility.estimated_fix_minutes
+        )?;
+    } else {
+        writeln!(out, "  No fixes required")?;
+    }
+    writeln!(out)?;
+
+    // ── Build Environment ──
     writeln!(out, "Build Environment")?;
     print_kv(
         out,
@@ -133,7 +190,7 @@ pub fn render(
     let rust_detail = if evidence_helpers::ev_bool(evidence, "config.RUST")
         && evidence_helpers::ev_bool(evidence, "config.RUST_IS_AVAILABLE")
     {
-        "Compatible — kernel has CONFIG_RUST=y and Rust compiler is available"
+        "Compatible — CONFIG_RUST=y and Rust compiler is available"
     } else if evidence_helpers::ev_bool(evidence, "config.RUST") {
         "Partially Compatible — CONFIG_RUST=y but compiler not detected"
     } else if evidence_helpers::ev_bool(evidence, "config.RUST_IS_AVAILABLE") {
@@ -197,18 +254,16 @@ fn stars_str(categories: &[CategoryScore]) -> &'static str {
     let total: u8 = categories.iter().map(|c| c.stars).sum();
     let max = (categories.len() * 5) as u8;
     if total >= max {
-        return "★★★★★";
+        "★★★★★"
+    } else if total as f64 >= max as f64 * 0.8 {
+        "★★★★☆"
+    } else if total as f64 >= max as f64 * 0.6 {
+        "★★★☆☆"
+    } else if total as f64 >= max as f64 * 0.4 {
+        "★★☆☆☆"
+    } else {
+        "★☆☆☆☆"
     }
-    if total as f64 >= max as f64 * 0.8 {
-        return "★★★★☆";
-    }
-    if total as f64 >= max as f64 * 0.6 {
-        return "★★★☆☆";
-    }
-    if total as f64 >= max as f64 * 0.4 {
-        return "★★☆☆☆";
-    }
-    "★☆☆☆☆"
 }
 
 fn category_stars(n: u8) -> String {
@@ -219,5 +274,20 @@ fn category_stars(n: u8) -> String {
         2 => "★★☆☆☆".into(),
         1 => "★☆☆☆☆".into(),
         _ => "☆☆☆☆☆".into(),
+    }
+}
+
+fn score_bar(score: u8) -> String {
+    let filled = (score / 10).min(10) as usize;
+    let empty = 10 - filled;
+    format!("[{}{}]", "█".repeat(filled), "░".repeat(empty))
+}
+
+fn component_icon(comp: &ComponentScore) -> &'static str {
+    match comp.status {
+        crate::core::analysis::ComponentStatus::Good => "✓",
+        crate::core::analysis::ComponentStatus::Partial => "~",
+        crate::core::analysis::ComponentStatus::Missing => "✗",
+        crate::core::analysis::ComponentStatus::Blocking => "✘",
     }
 }

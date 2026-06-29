@@ -18,6 +18,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     render::render(
         &result.evidence,
         &result.readiness,
+        &result.compatibility,
         &result.recommendations,
         &mut out,
     )
