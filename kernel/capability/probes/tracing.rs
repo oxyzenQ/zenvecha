@@ -6,7 +6,7 @@
 //! Discovers available tracing frameworks: ftrace, kprobes, tracepoints.
 
 use crate::capability::probes::Probe;
-use crate::capability::types::Capability;
+use crate::capability::types::CapabilityDescriptor;
 
 pub struct TracingProbe;
 

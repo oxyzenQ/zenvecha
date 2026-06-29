@@ -7,7 +7,7 @@
 //! Read-only — no symbol resolution, no hooking.
 
 use crate::capability::probes::Probe;
-use crate::capability::types::Capability;
+use crate::capability::types::CapabilityDescriptor;
 
 pub struct SymbolsProbe;
 

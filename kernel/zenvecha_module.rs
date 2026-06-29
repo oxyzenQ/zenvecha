@@ -3,24 +3,41 @@
 
 //! Zenvecha Kernel Module — Wolfzenix Kernel Capability Platform.
 //!
-//! This module discovers kernel capabilities and exposes them
-//! as structured facts to userspace via proc filesystem.
+//! ## Contract
 //!
-//! The module NEVER:
+//! This module discovers kernel capabilities and exposes them as
+//! structured key=value pairs via /proc/zenvecha/*.
+//!
+//! **The module NEVER:**
 //!   - Renders human-readable output
 //!   - Computes scores or recommendations
-//!   - Makes decisions
-//!   - Knows anything about CLI or pipeline
+//!   - Makes decisions or performs reasoning
+//!   - Knows anything about the CLI or pipeline
 //!
-//! The module ONLY:
+//! **The module ONLY:**
 //!   - Discovers facts about the running kernel
-//!   - Exposes structured key=value pairs
+//!   - Exposes structured data via proc filesystem
 //!
-//! Architecture:
+//! ## Two-Layer Type System
+//!
+//!   Compile-time:  Probe → discover() → &'static [CapabilityDescriptor]
+//!   Runtime:       Probe → run() → ProbeResult (dynamically allocated)
+//!
+//! The compile-time skeleton (current) defines the contract.
+//! The runtime implementation uses kernel allocators for dynamic data.
+//!
+//! ## Data Flow
+//!
 //!   Kernel Space:
-//!     zenvecha_module → capability/probes/* → /proc/zenvecha/*
+//!     probes/* → all_probes() → /proc/zenvecha/{probe}/{key}
 //!   Userspace:
-//!     caps/kernel_cap.rs → Evidence → Pipeline → Render
+//!     kernel_cap/{domain}.rs → Evidence → Pipeline → Render
+//!
+//! ## Future Providers
+//!
+//!   Supported without modification:
+//!     livepatch, tracepoints, ftrace, kprobes, scheduler, memory,
+//!     security, eBPF, module verifier, ABI inspector
 
 #![no_std]
 
@@ -33,7 +50,7 @@ module! {
     type: ZenvechaModule,
     name: "zenvecha",
     author: "rezky_nightky",
-    description: "Wolfzenix Kernel Capability Discovery",
+    description: "Wolfzenix Kernel Capability Discovery — structured kernel facts",
     license: "GPL",
 }
 
@@ -41,29 +58,27 @@ struct ZenvechaModule;
 
 impl kernel::Module for ZenvechaModule {
     fn init(_module: &'static ThisModule) -> Result<Self> {
-        printk!(
-            "zenvecha: Wolfzenix kernel capability discovery loaded\n"
-        );
+        printk!("zenvecha: Wolfzenix kernel capability discovery loaded\n");
 
         // Discover all capabilities via the probe registry.
-        // In a full implementation, each probe's output is registered
-        // as a proc file under /proc/zenvecha/<probe_name>.
+        // Each probe's descriptors define the proc entries to create.
         //
-        // Example:
+        // Runtime behavior (in a real kernel build):
         //   for probe in capability::probes::all_probes() {
-        //       create_proc_entry(probe.name(), probe.discover());
+        //       let dir = proc_mkdir(probe.name(), zenvecha_proc_root);
+        //       for desc in probe.discover() {
+        //           // Create /proc/zenvecha/{probe}/{key}
+        //           // populated with ProbeResult values at read time
+        //       }
         //   }
-        //
-        // This provides: /proc/zenvecha/version, /proc/zenvecha/symbols,
-        // /proc/zenvecha/kallsyms, /proc/zenvecha/btf, etc.
 
         let probes = capability::probes::all_probes();
-        let total_caps: usize = probes.iter().map(|p| p.discover().len()).sum();
+        let total_descriptors: usize = probes.iter().map(|p| p.discover().len()).sum();
 
         printk!(
-            "zenvecha: {} probes loaded, {} total capability facts\n",
+            "zenvecha: {} probes loaded, {} capability descriptors defined\n",
             probes.len(),
-            total_caps,
+            total_descriptors,
         );
 
         Ok(ZenvechaModule)

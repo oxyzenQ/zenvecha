@@ -6,7 +6,7 @@
 //! Discovers: CPU arch, endianness, page size, word width.
 
 use crate::capability::probes::Probe;
-use crate::capability::types::Capability;
+use crate::capability::types::CapabilityDescriptor;
 
 pub struct ArchitectureProbe;
 

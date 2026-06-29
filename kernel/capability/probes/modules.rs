@@ -6,7 +6,7 @@
 //! Discovers: CONFIG_MODULES status, active module count, vermagic.
 
 use crate::capability::probes::Probe;
-use crate::capability::types::Capability;
+use crate::capability::types::CapabilityDescriptor;
 
 pub struct ModuleLoaderProbe;
 

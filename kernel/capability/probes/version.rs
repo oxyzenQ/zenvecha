@@ -6,7 +6,7 @@
 //! Discovers: running kernel release, major/minor/patch version.
 
 use crate::capability::probes::Probe;
-use crate::capability::types::Capability;
+use crate::capability::types::CapabilityDescriptor;
 
 pub struct VersionProbe;
 

@@ -3,18 +3,17 @@
 
 //! Zenvecha Kernel Capability Layer.
 //!
-//! Structured kernel capability discovery. Every probe is read-only.
-//! Facts flow from kernel → proc → userspace → Evidence → Pipeline.
+//! ## Architecture
 //!
-//! Design:
-//!   - One trait: Probe
-//!   - One registry: all_probes()
-//!   - One new file per capability domain
-//!   - Zero changes to existing probes when adding new ones
+//! Two layers of types:
+//!   1. CapabilityDescriptor — compile-time contract (what probes promise)
+//!   2. ProbeResult           — runtime contract (what was actually found)
 //!
-//! Architecture:
+//! ## Directory Structure
+//!
 //!   kernel/capability/
-//!     types.rs       → Capability, CapabilitySet, CapabilityKind
+//!     types.rs       → CapabilityDescriptor, ProbeResult, ProbeStatus,
+//!                       ExportedSymbol, CapabilityKind
 //!     probes/
 //!       mod.rs       → Probe trait + all_probes() registry
 //!       version.rs   → kernel version
@@ -24,6 +23,14 @@
 //!       modules.rs   → module loader status
 //!       tracing.rs   → tracing frameworks
 //!       arch.rs      → CPU architecture
+//!
+//! ## Adding a Provider
+//!
+//!   1. Create probes/{domain}.rs — implement Probe
+//!   2. Add entry to probes/mod.rs all_probes()
+//!   3. Create src/core/caps/kernel_cap/{domain}.rs — implement Capability
+//!   4. Register in src/core/capability.rs register_all()
+//!   5. Zero modifications to any existing file (except steps 2+4)
 
 pub mod probes;
 pub mod types;
