@@ -1,15 +1,14 @@
 // Copyright (C) 2026 rezky_nightky
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Tracing infrastructure probes — reads from Zenvecha kernel module.
+//! Tracing infrastructure probes.
 //!
-//! Proc keys: tracing.ftrace, tracing.kprobes
+//! Uses: kernel_bool()
 
 use crate::core::capability::Capability;
-use crate::core::caps::kernel_cap::read_proc;
-use crate::core::evidence::{Evidence, EvidenceValue};
+use crate::core::caps::kernel_cap::kernel_bool;
+use crate::core::evidence::Evidence;
 
-/// ftrace availability from kernel module.
 pub struct KernelTracingFtrace;
 
 impl Capability for KernelTracingFtrace {
@@ -20,14 +19,10 @@ impl Capability for KernelTracingFtrace {
         "ftrace (kernel)"
     }
     fn probe(&self) -> Evidence {
-        let val = read_proc("tracing.ftrace")
-            .map(|s| s == "available")
-            .unwrap_or(false);
-        Evidence::present(self.id(), EvidenceValue::Bool(val))
+        kernel_bool(self.id(), "tracing.ftrace")
     }
 }
 
-/// kprobes availability from kernel module.
 pub struct KernelTracingKprobes;
 
 impl Capability for KernelTracingKprobes {
@@ -38,9 +33,6 @@ impl Capability for KernelTracingKprobes {
         "kprobes (kernel)"
     }
     fn probe(&self) -> Evidence {
-        let val = read_proc("tracing.kprobes")
-            .map(|s| s == "available")
-            .unwrap_or(false);
-        Evidence::present(self.id(), EvidenceValue::Bool(val))
+        kernel_bool(self.id(), "tracing.kprobes")
     }
 }
