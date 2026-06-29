@@ -7,7 +7,7 @@
 //! No business logic outside this pipeline. Each step is a pure function
 //! receiving the previous step's output.
 
-use crate::core::analysis::{self, Readiness};
+use crate::core::analysis::{self, Readiness, Risk};
 use crate::core::capability::Registry;
 use crate::core::evidence::Evidence;
 use crate::core::recommendation;
@@ -16,6 +16,7 @@ use crate::core::recommendation;
 pub struct AnalysisResult {
     pub evidence: Vec<Evidence>,
     pub readiness: Readiness,
+    pub risks: Vec<Risk>,
     pub recommendations: Vec<String>,
 }
 
@@ -23,11 +24,12 @@ pub struct AnalysisResult {
 pub fn run_analysis_pipeline() -> AnalysisResult {
     let reg = Registry::default();
     let evidence = reg.run_all();
-    let (readiness, _risks) = analysis::analyze(&evidence);
+    let (readiness, risks) = analysis::analyze(&evidence);
     let recommendations = recommendation::recommend(&evidence);
     AnalysisResult {
         evidence,
         readiness,
+        risks,
         recommendations,
     }
 }

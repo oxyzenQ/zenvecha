@@ -9,7 +9,7 @@
 
 use std::io::{self, Write};
 
-use crate::core::analysis;
+use crate::core::analysis::{Readiness, Risk};
 use crate::core::evidence::Evidence;
 use crate::core::evidence_helpers;
 
@@ -19,11 +19,11 @@ use crate::core::evidence_helpers;
 
 pub fn render_human(
     evidence: &[Evidence],
+    readiness: &Readiness,
+    risks: &[Risk],
+    recs: &[String],
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (readiness, risks) = analysis::analyze(evidence);
-    let recs = crate::core::recommendation::recommend(evidence);
-
     writeln!(out, "Zenvecha Kernel Intelligence Report")?;
     writeln!(out)?;
 
@@ -85,7 +85,7 @@ pub fn render_human(
     if !risks.is_empty() {
         render_section(out, "Compatibility Risks")?;
         writeln!(out)?;
-        for risk in &risks {
+        for risk in risks {
             writeln!(out, "  ⚠  {}", risk.description)?;
         }
         writeln!(out)?;
@@ -117,11 +117,11 @@ pub fn render_human(
 
 pub fn render_compact(
     evidence: &[Evidence],
+    readiness: &Readiness,
+    risks: &[Risk],
+    recs: &[String],
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (readiness, risks) = analysis::analyze(evidence);
-    let recs = crate::core::recommendation::recommend(evidence);
-
     writeln!(out, "Zenvecha v{}", env!("CARGO_PKG_VERSION"))?;
     writeln!(
         out,
@@ -169,11 +169,11 @@ pub fn render_compact(
 
 pub fn render_json(
     evidence: &[Evidence],
+    readiness: &Readiness,
+    risks: &[Risk],
+    recs: &[String],
     out: &mut io::StdoutLock<'_>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (readiness, risks) = analysis::analyze(evidence);
-    let recs = crate::core::recommendation::recommend(evidence);
-
     let mut buf = String::new();
     buf.push_str("{\n");
 
