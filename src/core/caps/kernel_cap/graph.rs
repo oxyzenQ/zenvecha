@@ -309,6 +309,41 @@ fn known_graph() -> Vec<CapabilityNode> {
                 "symbols.kallsyms_all",
                 "Full kallsyms improves patch reliability",
             ),
+        // ── Memory (Phase 7 Milestone E) ──
+        node("kernel.memory.page_size", "Page Size", Infrastructure),
+        node("kernel.memory.hugepages", "Huge Pages", Infrastructure),
+        node("kernel.memory.model", "Memory Model", Infrastructure),
+        // ── Scheduler (Phase 7 Milestone E) ──
+        node(
+            "kernel.scheduler.classes",
+            "Scheduler Classes",
+            Infrastructure,
+        ),
+        node(
+            "kernel.scheduler.preemption",
+            "Preemption Model",
+            Infrastructure,
+        ),
+        // ── Tracepoints (Phase 7 Milestone E) ──
+        node("kernel.tracepoints.count", "Tracepoint Count", Tracing).dep(
+            Required,
+            "config.TRACEPOINTS",
+            "Tracepoints must be enabled",
+        ),
+        node(
+            "kernel.tracepoints.subsystems",
+            "Tracepoint Subsystems",
+            Tracing,
+        )
+        .dep(
+            Required,
+            "config.TRACEPOINTS",
+            "Tracepoints must be enabled",
+        ),
+        // ── Security Module (Phase 7 Milestone E) ──
+        node("kernel.security.lockdown", "Lockdown Mode", Security),
+        node("kernel.security.lsms", "Active LSMs", Security),
+        node("kernel.security.kaslr", "KASLR Status", Security),
         // ── Kernel Module Capabilities (Phase 7) ──
         node("kernel.module_loaded", "Zenvecha Module", KernelModule).dep(
             Required,

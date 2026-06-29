@@ -129,18 +129,26 @@ pub(crate) fn validate_framework_usage() {
 pub mod btf;
 pub mod graph;
 pub mod loader;
+pub mod memory;
 pub mod module;
+pub mod scheduler;
+pub mod security;
 pub mod symbols;
+pub mod tracepoints;
 pub mod tracing;
 pub mod version;
 
 pub use btf::KernelBtfStatus;
 pub use loader::KernelModuleLoader;
+pub use memory::{KernelHugePages, KernelMemoryModel, KernelPageSize};
 pub use module::KernelModuleStatus;
+pub use scheduler::{KernelPreemption, KernelSchedulerClasses};
+pub use security::{KernelActiveLsms, KernelKaslr, KernelLockdown};
 pub use symbols::{
     KernelSymbolCollection, KernelSymbolExported, KernelSymbolGplOnly, KernelSymbolInternal,
     KernelSymbolKallsyms, KernelSymbolKallsymsAll, KernelSymbolKptrRestrict,
     KernelSymbolModuleOwned, KernelSymbolNamespaced, KernelSymbolTotal, KernelSymbolVmlinux,
 };
+pub use tracepoints::{KernelTracepointCount, KernelTracepointSubsystems};
 pub use tracing::{KernelTracingFtrace, KernelTracingKprobes};
 pub use version::KernelVersionFromModule;

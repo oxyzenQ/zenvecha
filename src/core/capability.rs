@@ -171,4 +171,22 @@ pub fn register_all(reg: &mut Registry) {
     reg.register(Box::new(caps::kernel_cap::KernelModuleLoader));
     reg.register(Box::new(caps::kernel_cap::KernelTracingFtrace));
     reg.register(Box::new(caps::kernel_cap::KernelTracingKprobes));
+
+    // Security (Phase 7 Milestone E)
+    reg.register(Box::new(caps::kernel_cap::KernelLockdown));
+    reg.register(Box::new(caps::kernel_cap::KernelActiveLsms));
+    reg.register(Box::new(caps::kernel_cap::KernelKaslr));
+
+    // Scheduler (Phase 7 Milestone E)
+    reg.register(Box::new(caps::kernel_cap::KernelSchedulerClasses));
+    reg.register(Box::new(caps::kernel_cap::KernelPreemption));
+
+    // Memory (Phase 7 Milestone E)
+    reg.register(Box::new(caps::kernel_cap::KernelPageSize));
+    reg.register(Box::new(caps::kernel_cap::KernelHugePages));
+    reg.register(Box::new(caps::kernel_cap::KernelMemoryModel));
+
+    // Tracepoints (Phase 7 Milestone E)
+    reg.register(Box::new(caps::kernel_cap::KernelTracepointCount));
+    reg.register(Box::new(caps::kernel_cap::KernelTracepointSubsystems));
 }
