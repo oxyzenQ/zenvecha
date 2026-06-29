@@ -43,7 +43,11 @@ pub mod version;
 pub use btf::KernelBtfStatus;
 pub use loader::KernelModuleLoader;
 pub use module::KernelModuleStatus;
-pub use symbols::KernelSymbolCount;
+pub use symbols::{
+    KernelSymbolCollection, KernelSymbolExported, KernelSymbolGplOnly, KernelSymbolInternal,
+    KernelSymbolKallsyms, KernelSymbolKallsymsAll, KernelSymbolKptrRestrict,
+    KernelSymbolModuleOwned, KernelSymbolNamespaced, KernelSymbolTotal, KernelSymbolVmlinux,
+};
 pub use tracing::{KernelTracingFtrace, KernelTracingKprobes};
 pub use version::KernelVersionFromModule;
 

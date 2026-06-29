@@ -153,7 +153,20 @@ pub fn register_all(reg: &mut Registry) {
     // Kernel module capability bridge (Phase 7)
     reg.register(Box::new(caps::kernel_cap::KernelModuleStatus));
     reg.register(Box::new(caps::kernel_cap::KernelVersionFromModule));
-    reg.register(Box::new(caps::kernel_cap::KernelSymbolCount));
+
+    // Symbol Discovery — reference runtime provider
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolTotal));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolExported));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolGplOnly));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolInternal));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolModuleOwned));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolVmlinux));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolNamespaced));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolKallsyms));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolKallsymsAll));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolKptrRestrict));
+    reg.register(Box::new(caps::kernel_cap::KernelSymbolCollection));
+
     reg.register(Box::new(caps::kernel_cap::KernelBtfStatus));
     reg.register(Box::new(caps::kernel_cap::KernelModuleLoader));
     reg.register(Box::new(caps::kernel_cap::KernelTracingFtrace));
