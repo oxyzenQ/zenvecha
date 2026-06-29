@@ -14,6 +14,7 @@ pub mod caps;
 pub mod evidence;
 pub mod evidence_helpers;
 pub mod knowledge;
+pub mod livepatch;
 pub mod pipeline;
 pub mod reasoning;
 pub mod recommendation;
