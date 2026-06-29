@@ -111,6 +111,152 @@ pub fn render_human(
     Ok(())
 }
 
+/// Full human report — includes all Wolfzenix engine outputs.
+pub fn render_human_full(
+    result: &crate::core::pipeline::AnalysisResult,
+    out: &mut io::StdoutLock<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let evidence = &result.evidence;
+    let compatibility = &result.compatibility;
+    let knowledge = &result.knowledge;
+    let reasoning = &result.reasoning;
+
+    writeln!(out, "══ Zenvecha Kernel Intelligence Report ══")?;
+    writeln!(out)?;
+
+    // Kernel Identity
+    render_section(out, "Kernel Identity")?;
+    render_kv(
+        out,
+        "  Version",
+        &evidence_helpers::ev_s(evidence, "kernel.release"),
+    )?;
+    render_kv(
+        out,
+        "  Architecture",
+        &evidence_helpers::ev_s(evidence, "kernel.arch"),
+    )?;
+    writeln!(out)?;
+
+    // Compatibility Score
+    render_section(out, "Compatibility")?;
+    writeln!(
+        out,
+        "  Score : {}% ({})",
+        compatibility.score, compatibility.level
+    )?;
+    writeln!(out, "  Risk  : {}", compatibility.risk.label())?;
+    writeln!(out)?;
+    for c in &compatibility.components {
+        let icon = match c.status {
+            crate::core::analysis::ComponentStatus::Good => "✔",
+            crate::core::analysis::ComponentStatus::Partial => "◐",
+            crate::core::analysis::ComponentStatus::Missing => "✘",
+            crate::core::analysis::ComponentStatus::Blocking => "🚫",
+        };
+        writeln!(out, "  {icon} {} — {}%", c.name, c.score)?;
+    }
+    writeln!(out)?;
+
+    // Blocking Issues
+    if !compatibility.blocking_issues.is_empty() {
+        render_section(out, "Blocking Issues")?;
+        writeln!(out)?;
+        for issue in &compatibility.blocking_issues {
+            writeln!(out, "  🚫 {}: {}", issue.component, issue.description)?;
+        }
+        writeln!(out)?;
+    }
+
+    // Decision Plan
+    let dp = &result.decision_plan;
+    render_section(out, "Decision Plan")?;
+    writeln!(out, "  Current  : {}%", dp.current_score)?;
+    writeln!(
+        out,
+        "  Expected : {}% (+{}%)",
+        dp.expected_score,
+        dp.expected_score.saturating_sub(dp.current_score)
+    )?;
+    if !dp.ranked_actions.is_empty() {
+        writeln!(out)?;
+        for a in &dp.ranked_actions {
+            writeln!(
+                out,
+                "  ▶ {} (+{}% in {} min, ROI {:.2})",
+                a.title, a.expected_score_gain, a.estimated_minutes, a.roi
+            )?;
+        }
+    } else {
+        writeln!(out, "  No actions required — system is ready")?;
+    }
+    writeln!(out)?;
+
+    // Prediction
+    let pred = &result.prediction;
+    render_section(out, "Prediction")?;
+    writeln!(out, "  Current Score : {}%", pred.current_score)?;
+    if !pred.scenarios.is_empty() {
+        writeln!(out)?;
+        for s in &pred.scenarios {
+            let delta = if s.score_delta >= 0 {
+                format!("+{}", s.score_delta)
+            } else {
+                format!("{}", s.score_delta)
+            };
+            writeln!(
+                out,
+                "  📈 If \"{}\" → {}% ({delta})",
+                s.action, s.expected_score
+            )?;
+        }
+    }
+    writeln!(out)?;
+
+    // Knowledge
+    render_section(out, "Kernel Intelligence")?;
+    writeln!(out, "  Kernel: {}", knowledge.kernel_version_str())?;
+    writeln!(
+        out,
+        "  Rules matched: {}/{}",
+        knowledge.total_rules_matched, knowledge.total_rules_evaluated
+    )?;
+    for insight in &knowledge.insights {
+        writeln!(out, "  • {}", insight)?;
+    }
+    writeln!(out)?;
+
+    // Reasoning
+    render_section(out, "Reasoning")?;
+    writeln!(out, "  {}", reasoning.system_narrative)?;
+    writeln!(out)?;
+    writeln!(out, "  ▸ {}", reasoning.readiness_reason.conclusion)?;
+    for line in &reasoning.readiness_reason.because {
+        writeln!(out, "    ↓ {line}")?;
+    }
+    writeln!(out)?;
+    writeln!(out, "  ↳ {}", reasoning.readiness_reason.confidence_reason)?;
+    writeln!(out)?;
+
+    // Recommendations
+    if !result.recommendations.is_empty() {
+        let is_optional = compatibility.blocking_issues.is_empty();
+        let label = if is_optional {
+            "Optional Improvements"
+        } else {
+            "Recommendations"
+        };
+        render_section(out, label)?;
+        writeln!(out)?;
+        for (i, rec) in result.recommendations.iter().enumerate() {
+            writeln!(out, "  {}. {rec}", i + 1)?;
+        }
+        writeln!(out)?;
+    }
+
+    Ok(())
+}
+
 // ============================================================================
 //  Compact renderer
 // ============================================================================
@@ -249,6 +395,151 @@ pub fn render_json(
     buf.push_str("}\n");
 
     write!(out, "{buf}")?;
+    Ok(())
+}
+
+/// Full JSON report — includes all Wolfzenix engine outputs.
+pub fn render_json_full(
+    result: &crate::core::pipeline::AnalysisResult,
+    out: &mut io::StdoutLock<'_>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut b = String::new();
+    b.push_str("{\n");
+    b.push_str(&format!(
+        "  \"version\": \"{}\",\n",
+        esc(env!("CARGO_PKG_VERSION"))
+    ));
+
+    // Readiness
+    b.push_str(&format!(
+        "  \"readiness\": {{ \"overall\": \"{}\", \"score\": \"{}\" }},\n",
+        esc(result.readiness.overall),
+        esc(result.readiness.stars)
+    ));
+
+    // Compatibility
+    let compat = &result.compatibility;
+    b.push_str("  \"compatibility\": {\n");
+    b.push_str(&format!("    \"score\": {},\n", compat.score));
+    b.push_str(&format!("    \"level\": \"{}\",\n", esc(compat.level)));
+    b.push_str(&format!(
+        "    \"confidence\": \"{}\",\n",
+        esc(compat.confidence.label())
+    ));
+    b.push_str(&format!(
+        "    \"risk\": \"{}\",\n",
+        esc(compat.risk.label())
+    ));
+    b.push_str("    \"components\": [\n");
+    for (i, c) in compat.components.iter().enumerate() {
+        let comma = if i + 1 < compat.components.len() {
+            ","
+        } else {
+            ""
+        };
+        b.push_str(&format!(
+            "      {{ \"name\": \"{}\", \"score\": {}, \"status\": \"{}\" }}{comma}\n",
+            esc(c.name),
+            c.score,
+            esc(c.status.label()),
+        ));
+    }
+    b.push_str("    ]\n  },\n");
+
+    // Decision
+    let dp = &result.decision_plan;
+    b.push_str("  \"decision\": {\n");
+    b.push_str(&format!("    \"current_score\": {},\n", dp.current_score));
+    b.push_str(&format!("    \"expected_score\": {},\n", dp.expected_score));
+    b.push_str(&format!(
+        "    \"estimated_total_minutes\": {},\n",
+        dp.estimated_total_fix_minutes
+    ));
+    b.push_str("    \"actions\": [\n");
+    for (i, a) in dp.ranked_actions.iter().enumerate() {
+        let comma = if i + 1 < dp.ranked_actions.len() {
+            ","
+        } else {
+            ""
+        };
+        b.push_str(&format!(
+            "      {{ \"title\": \"{}\", \"gain\": {}, \"minutes\": {}, \"roi\": {:.2} }}{comma}\n",
+            esc(&a.title),
+            a.expected_score_gain,
+            a.estimated_minutes,
+            a.roi
+        ));
+    }
+    b.push_str("    ]\n  },\n");
+
+    // Prediction
+    let pred = &result.prediction;
+    b.push_str("  \"prediction\": {\n");
+    b.push_str(&format!("    \"current_score\": {},\n", pred.current_score));
+    b.push_str("    \"scenarios\": [\n");
+    for (i, s) in pred.scenarios.iter().enumerate() {
+        let comma = if i + 1 < pred.scenarios.len() {
+            ","
+        } else {
+            ""
+        };
+        b.push_str(&format!(
+            "      {{ \"action\": \"{}\", \"expected_score\": {}, \"delta\": {}, \"confidence\": \"{}\" }}{comma}\n",
+            esc(&s.action), s.expected_score, s.score_delta, esc(s.confidence.label())
+        ));
+    }
+    b.push_str("    ]\n  },\n");
+
+    // Knowledge
+    let kn = &result.knowledge;
+    b.push_str("  \"knowledge\": {\n");
+    b.push_str(&format!(
+        "    \"kernel_version\": \"{}\",\n",
+        esc(&kn.kernel_version_str())
+    ));
+    b.push_str(&format!(
+        "    \"matched_rules\": {},\n",
+        kn.matched_rules.len()
+    ));
+    b.push_str(&format!(
+        "    \"total_rules_evaluated\": {},\n",
+        kn.total_rules_evaluated
+    ));
+    b.push_str("    \"insights\": [\n");
+    for (i, insight) in kn.insights.iter().enumerate() {
+        let comma = if i + 1 < kn.insights.len() { "," } else { "" };
+        b.push_str(&format!("      \"{}\"{comma}\n", esc(insight)));
+    }
+    b.push_str("    ]\n  },\n");
+
+    // Reasoning
+    let reason = &result.reasoning;
+    b.push_str("  \"reasoning\": {\n");
+    b.push_str(&format!(
+        "    \"narrative\": \"{}\",\n",
+        esc(&reason.system_narrative)
+    ));
+    b.push_str(&format!(
+        "    \"readiness_conclusion\": \"{}\",\n",
+        esc(&reason.readiness_reason.conclusion)
+    ));
+    b.push_str(&format!(
+        "    \"readiness_confidence\": \"{}\"\n",
+        esc(&reason.readiness_reason.confidence_reason)
+    ));
+    b.push_str("  },\n");
+
+    // Recommendations
+    b.push_str("  \"recommendations\": [\n");
+    let end = result.recommendations.len().min(10);
+    for (i, rec) in result.recommendations.iter().take(end).enumerate() {
+        let comma = if i + 1 < end { "," } else { "" };
+        b.push_str(&format!("    \"{}\"{comma}\n", esc(rec)));
+    }
+    b.push_str("  ]\n");
+
+    b.push_str("}\n");
+    write!(out, "{b}")?;
     Ok(())
 }
 

@@ -52,6 +52,13 @@ impl RiskLevel {
     }
 }
 
+/// Component weight for weighted scoring.
+#[derive(Clone, Debug)]
+pub struct ComponentWeight {
+    pub name: &'static str,
+    pub weight: f64, // 0.0–1.0, all weights must sum to 1.0
+}
+
 /// A scored component in the compatibility assessment.
 #[derive(Clone, Debug)]
 pub struct ComponentScore {
@@ -110,6 +117,8 @@ pub struct Compatibility {
     pub risk: RiskLevel,
     /// Per-component scores.
     pub components: Vec<ComponentScore>,
+    /// Weight configuration used (core components weighted higher).
+    pub weights: Vec<ComponentWeight>,
     /// Issues that absolutely block kernel development.
     pub blocking_issues: Vec<BlockingIssue>,
     /// Recommended next actions, ordered by priority.
@@ -122,10 +131,54 @@ pub struct Compatibility {
     pub next_best_action: String,
 }
 
+/// Core component weights — sum = 1.0.
+/// Headers and toolchain dominate because without them nothing works.
+fn component_weights() -> Vec<ComponentWeight> {
+    vec![
+        ComponentWeight {
+            name: "Kernel Headers",
+            weight: 0.25,
+        },
+        ComponentWeight {
+            name: "Toolchain",
+            weight: 0.20,
+        },
+        ComponentWeight {
+            name: "Kernel Config",
+            weight: 0.15,
+        },
+        ComponentWeight {
+            name: "Build Environment",
+            weight: 0.10,
+        },
+        ComponentWeight {
+            name: "Modules",
+            weight: 0.10,
+        },
+        ComponentWeight {
+            name: "Symbol Resolution",
+            weight: 0.08,
+        },
+        ComponentWeight {
+            name: "Rust Support",
+            weight: 0.05,
+        },
+        ComponentWeight {
+            name: "Debug Capabilities",
+            weight: 0.04,
+        },
+        ComponentWeight {
+            name: "Filesystem Mounts",
+            weight: 0.03,
+        },
+    ]
+}
+
 /// Assess compatibility from evidence.
 pub fn assess(evidence: &[Evidence]) -> Compatibility {
     let components = score_components(evidence);
-    let score = overall_score(&components);
+    let weights = component_weights();
+    let score = weighted_overall_score(&components, &weights);
     let blocking_issues = detect_blocking(evidence);
     let recommended_actions = recommend_actions(evidence, &blocking_issues);
     let affected_components = affected(&components);
@@ -144,6 +197,7 @@ pub fn assess(evidence: &[Evidence]) -> Compatibility {
         confidence,
         risk,
         components,
+        weights,
         blocking_issues,
         recommended_actions,
         estimated_fix_minutes,
@@ -571,13 +625,23 @@ fn score_filesystem_mounts(evidence: &[Evidence]) -> ComponentScore {
     }
 }
 
-fn overall_score(components: &[ComponentScore]) -> u8 {
+/// Weighted scoring — core components (headers, toolchain) contribute more.
+fn weighted_overall_score(components: &[ComponentScore], weights: &[ComponentWeight]) -> u8 {
     if components.is_empty() {
         return 0;
     }
-    let total: u32 = components.iter().map(|c| c.score as u32).sum();
-    let max = (components.len() * 100) as u32;
-    ((total * 100) / max) as u8
+    let weighted: f64 = components
+        .iter()
+        .map(|c| {
+            let w = weights
+                .iter()
+                .find(|cw| cw.name == c.name)
+                .map(|cw| cw.weight)
+                .unwrap_or(0.0);
+            c.score as f64 * w
+        })
+        .sum();
+    weighted.round() as u8
 }
 
 fn score_label(score: u8) -> &'static str {

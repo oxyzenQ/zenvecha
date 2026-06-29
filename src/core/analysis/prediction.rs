@@ -124,6 +124,12 @@ pub fn simulate(
         .map(|action| simulate_one(evidence, compatibility, action))
         .collect();
 
+    // Always generate at least one scenario even without ranked actions.
+    // For systems that are already healthy, show "what-if" improvements.
+    if scenarios.is_empty() {
+        scenarios = generate_whatif_scenarios(evidence, compatibility);
+    }
+
     // Sort by expected score descending (best outcome first)
     scenarios.sort_by_key(|s| std::cmp::Reverse(s.expected_score));
 
@@ -131,6 +137,77 @@ pub fn simulate(
         current_score: compatibility.score,
         scenarios,
     }
+}
+
+/// Generate what-if scenarios when there are no ranked actions —
+/// shows potential improvements for systems that are already healthy.
+fn generate_whatif_scenarios(
+    evidence: &[Evidence],
+    compatibility: &Compatibility,
+) -> Vec<Scenario> {
+    let mut scenarios = Vec::new();
+
+    let rust_enabled = evidence_helpers::ev_bool(evidence, "config.RUST");
+    if !rust_enabled {
+        scenarios.push(Scenario {
+            title: "Enable Rust for Linux".into(),
+            action: "Enable CONFIG_RUST".into(),
+            expected_score: (compatibility.score + 5).min(100),
+            score_delta: 5,
+            expected_risk: PredictedRisk::Low,
+            confidence: PredictionConfidence::Medium,
+            expected_build_success: 70,
+            estimated_minutes: 15,
+            requires_reboot: true,
+            unlocked_capabilities: vec!["Rust kernel module development".into()],
+            breaking_changes: vec![],
+            warnings: vec!["Rust toolchain must already be installed".into()],
+            assumptions: vec!["Rust toolchain already installed".into()],
+        });
+    }
+
+    let bindgen_ok = evidence_helpers::ev_bool(evidence, "toolchain.bindgen");
+    if !bindgen_ok {
+        scenarios.push(Scenario {
+            title: "Install Rust Bindings Generator".into(),
+            action: "Install bindgen".into(),
+            expected_score: (compatibility.score + 3).min(100),
+            score_delta: 3,
+            expected_risk: PredictedRisk::None,
+            confidence: PredictionConfidence::High,
+            expected_build_success: 95,
+            estimated_minutes: 5,
+            requires_reboot: false,
+            unlocked_capabilities: vec!["Rust-to-C binding generation".into()],
+            breaking_changes: vec![],
+            warnings: vec![],
+            assumptions: vec!["Package manager available".into()],
+        });
+    }
+
+    let source_ok = evidence_helpers::ev_text_value(evidence, "build.source_path").is_some();
+    if !source_ok {
+        scenarios.push(Scenario {
+            title: "Install Full Kernel Source".into(),
+            action: "Install kernel source".into(),
+            expected_score: (compatibility.score + 7).min(100),
+            score_delta: 7,
+            expected_risk: PredictedRisk::Low,
+            confidence: PredictionConfidence::Medium,
+            expected_build_success: 85,
+            estimated_minutes: 10,
+            requires_reboot: false,
+            unlocked_capabilities: vec![
+                "Full kernel source exploration".into(),
+                "Module development with full API access".into(),
+            ],
+            breaking_changes: vec![],
+            warnings: vec!["Requires ~1GB disk space".into()],
+            assumptions: vec!["Kernel release 6.x or newer".into()],
+        });
+    }
+
+    scenarios
 }
 
 // ============================================================================

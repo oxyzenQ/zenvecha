@@ -42,6 +42,8 @@ impl KnowledgeBase {
                 id: "kver-6.18-rust-improved",
                 min_version_major: 6,
                 min_version_minor: 18,
+                max_version_major: None,
+                max_version_minor: None,
                 category: KnowledgeCategory::Rust,
                 description: "Rust for Linux subsystem significantly improved",
                 implications: &[
@@ -55,6 +57,8 @@ impl KnowledgeBase {
                 id: "kver-6.20-ftrace-v2",
                 min_version_major: 6,
                 min_version_minor: 20,
+                max_version_major: None,
+                max_version_minor: None,
                 category: KnowledgeCategory::Feature,
                 description: "ftrace API v2 introduced with improved hooking",
                 implications: &[
@@ -68,8 +72,10 @@ impl KnowledgeBase {
                 id: "kver-6.12-bpf-improvements",
                 min_version_major: 6,
                 min_version_minor: 12,
+                max_version_major: Some(6),
+                max_version_minor: Some(17),
                 category: KnowledgeCategory::Feature,
-                description: "BPF verifier and JIT improvements",
+                description: "BPF verifier and JIT improvements (6.12–6.17)",
                 implications: &[
                     "More complex BPF programs supported",
                     "Better BPF CO-RE compatibility",
@@ -80,6 +86,8 @@ impl KnowledgeBase {
                 id: "kver-6.6-lts",
                 min_version_major: 6,
                 min_version_minor: 6,
+                max_version_major: Some(6),
+                max_version_minor: Some(11),
                 category: KnowledgeCategory::Kernel,
                 description: "Linux 6.6 LTS — long-term support kernel",
                 implications: &[
@@ -93,6 +101,8 @@ impl KnowledgeBase {
                 id: "kver-6.1-lts",
                 min_version_major: 6,
                 min_version_minor: 1,
+                max_version_major: Some(6),
+                max_version_minor: Some(5),
                 category: KnowledgeCategory::Kernel,
                 description: "Linux 6.1 LTS — previous long-term support kernel",
                 implications: &[
@@ -105,8 +115,10 @@ impl KnowledgeBase {
                 id: "kver-6.0-rust-initial",
                 min_version_major: 6,
                 min_version_minor: 0,
+                max_version_major: Some(6),
+                max_version_minor: Some(17),
                 category: KnowledgeCategory::Rust,
-                description: "Initial Rust for Linux merge (experimental)",
+                description: "Initial Rust for Linux merge (experimental, pre-6.18)",
                 implications: &[
                     "Rust support is experimental",
                     "Limited driver APIs only",
@@ -118,6 +130,8 @@ impl KnowledgeBase {
                 id: "kver-5.15-lts",
                 min_version_major: 5,
                 min_version_minor: 15,
+                max_version_major: Some(5),
+                max_version_minor: Some(99),
                 category: KnowledgeCategory::Kernel,
                 description: "Linux 5.15 LTS — legacy long-term support",
                 implications: &[
@@ -130,6 +144,8 @@ impl KnowledgeBase {
                 id: "kver-legacy",
                 min_version_major: 0,
                 min_version_minor: 0,
+                max_version_major: Some(5),
+                max_version_minor: Some(14),
                 category: KnowledgeCategory::Deprecation,
                 description: "Pre-5.15 kernel — no Rust for Linux, limited BPF",
                 implications: &[

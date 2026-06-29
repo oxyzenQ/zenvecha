@@ -31,6 +31,15 @@ pub struct KnowledgeResult {
     pub total_rules_matched: usize,
 }
 
+impl KnowledgeResult {
+    pub fn kernel_version_str(&self) -> String {
+        match &self.kernel_version {
+            Some(kv) => format!("{}.{}", kv.major, kv.minor),
+            None => "Unknown".to_string(),
+        }
+    }
+}
+
 /// Resolve the knowledge base against system evidence.
 pub fn resolve(evidence: &[Evidence]) -> KnowledgeResult {
     let kb = KnowledgeBase::load();
@@ -42,7 +51,13 @@ pub fn resolve(evidence: &[Evidence]) -> KnowledgeResult {
     total += kb.kernel_rules.len();
     for rule in &kb.kernel_rules {
         if let Some(ver) = kv.clone() {
-            if version_gte(&ver, rule.min_version_major, rule.min_version_minor) {
+            if version_in_range(
+                &ver,
+                rule.min_version_major,
+                rule.min_version_minor,
+                rule.max_version_major,
+                rule.max_version_minor,
+            ) {
                 matched.push(MatchedRule {
                     rule_id: rule.id,
                     category: rule.category,
@@ -204,7 +219,22 @@ fn parse_kernel_version(evidence: &[Evidence]) -> Option<KernelVersion> {
 }
 
 fn version_gte(ver: &KernelVersion, min_major: u32, min_minor: u32) -> bool {
-    ver.major > min_major || (ver.major == min_major && ver.minor >= min_minor)
+    version_in_range(ver, min_major, min_minor, None, None)
+}
+
+fn version_in_range(
+    ver: &KernelVersion,
+    min_major: u32,
+    min_minor: u32,
+    max_major: Option<u32>,
+    max_minor: Option<u32>,
+) -> bool {
+    let meets_min = ver.major > min_major || (ver.major == min_major && ver.minor >= min_minor);
+    let meets_max = match (max_major, max_minor) {
+        (Some(maj), Some(min)) => ver.major < maj || (ver.major == maj && ver.minor <= min),
+        _ => true,
+    };
+    meets_min && meets_max
 }
 
 fn build_config_match(

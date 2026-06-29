@@ -58,6 +58,8 @@ pub struct KernelRule {
     pub id: &'static str,
     pub min_version_major: u32,
     pub min_version_minor: u32,
+    pub max_version_major: Option<u32>,
+    pub max_version_minor: Option<u32>,
     pub category: KnowledgeCategory,
     pub description: &'static str,
     pub implications: &'static [&'static str],

@@ -292,34 +292,58 @@ pub fn render(
     writeln!(out, "  {}", reasoning.system_narrative)?;
     writeln!(out)?;
 
-    // Readiness reason
-    writeln!(out, "  Why {}", reasoning.readiness_reason.conclusion)?;
+    // Readiness reason with chain
+    writeln!(out, "  ▸ {}", reasoning.readiness_reason.conclusion)?;
     writeln!(out)?;
     for line in &reasoning.readiness_reason.because {
-        writeln!(out, "    • {line}")?;
+        writeln!(out, "    ↓ {line}")?;
+    }
+    if !reasoning.readiness_reason.supporting_evidence.is_empty() {
+        writeln!(out)?;
+        writeln!(out, "    Evidence:")?;
+        for ev in &reasoning.readiness_reason.supporting_evidence {
+            writeln!(out, "      {} → {}", ev.label, ev.value)?;
+        }
     }
     writeln!(
         out,
-        "    Confidence: {}",
+        "    ↳ {}",
         reasoning.readiness_reason.confidence_reason
     )?;
     writeln!(out)?;
 
+    // Dependencies
+    if !reasoning.readiness_reason.dependencies.is_empty() {
+        writeln!(
+            out,
+            "    Engines: {}",
+            reasoning.readiness_reason.dependencies.join(" → ")
+        )?;
+        writeln!(out)?;
+    }
+
     // Decision reason
     if let Some(ref decision) = reasoning.decision_reason {
-        writeln!(out, "  Decision")?;
-        writeln!(out, "    → {}", decision.conclusion)?;
+        writeln!(out, "  ▸ Decision: {}", decision.conclusion)?;
         writeln!(out)?;
         for line in &decision.because {
             writeln!(out, "    Why: {line}")?;
         }
         if !decision.supporting_evidence.is_empty() {
+            writeln!(out)?;
             writeln!(out, "    Evidence:")?;
             for ev in &decision.supporting_evidence {
                 writeln!(out, "      • {} → {}", ev.label, ev.value)?;
             }
         }
-        writeln!(out, "    Confidence: {}", decision.confidence_reason)?;
+        if !decision.limitations.is_empty() {
+            writeln!(out)?;
+            for lim in &decision.limitations {
+                writeln!(out, "    ⚠ {lim}")?;
+            }
+        }
+        writeln!(out)?;
+        writeln!(out, "    ↳ {}", decision.confidence_reason)?;
         writeln!(out)?;
     }
 
@@ -330,7 +354,7 @@ pub fn render(
         for block in &reasoning.blocking_reasons {
             writeln!(out, "    ✘ {}", block.conclusion)?;
             for ev in &block.supporting_evidence {
-                writeln!(out, "      Evidence: {} → {}", ev.label, ev.value)?;
+                writeln!(out, "      ← {} → {}", ev.label, ev.value)?;
             }
         }
         writeln!(out)?;
@@ -473,9 +497,14 @@ pub fn render(
     }
     writeln!(out)?;
 
-    // Recommendations
+    // Recommendations — optional when no blocking issues remain
     if !recs.is_empty() {
-        writeln!(out, "Recommendations")?;
+        let is_optional = compatibility.blocking_issues.is_empty();
+        if is_optional {
+            writeln!(out, "Optional Improvements")?;
+        } else {
+            writeln!(out, "Recommendations")?;
+        }
         writeln!(out)?;
         let end = recs.len().min(10);
         for (i, rec) in recs.iter().take(end).enumerate() {
