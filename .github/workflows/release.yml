@@ -39,4 +39,25 @@ jobs:
           files: |
             zenvecha-*.tar.gz
             zenvecha-*.tar.gz.sha512sum
-          generate_release_notes: true
+          body: |
+            ## zenvecha ${{ github.ref_name }}
+
+            Safe runtime patching for Linux kernel fixes without reboot.
+
+            ### Install
+            ```bash
+            tar xzf zenvecha-*.tar.gz
+            sudo install -Dm755 zenvecha /usr/local/bin/zenvecha
+            zenvecha --version
+            ```
+
+            ### What's new
+            See [CHANGELOG.md](https://github.com/oxyzenQ/zenvecha/blob/main/CHANGELOG.md)
+
+            ### Verify
+            ```bash
+            sha512sum -c zenvecha-*.sha512sum
+            ```
+
+            ---
+            (c) 2026 rezky_nightky (oxyzenQ) - GPL-3.0-only
