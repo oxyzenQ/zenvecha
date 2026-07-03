@@ -1,0 +1,4 @@
+[codespell]
+skip = target,.git,LICENSE,*.png,*.jpg,*.svg,*.ico,*.lock
+ignore-words-list = crate,ser,cant,fo,hart,wee,ot,te,ba
+quiet-level = 3

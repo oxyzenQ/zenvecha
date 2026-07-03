@@ -1,41 +1,73 @@
 #!/usr/bin/env bash
-# Copyright (C) 2026 rezky_nightky
 # SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 rezky_nightky (oxyzenQ)
 #
-# install.sh — Install Zenvecha binary.
-# Usage:
-#   ./scripts/install.sh           # User install (~/.local/bin)
-#   ./scripts/install.sh --system  # System install (/usr/local/bin, needs sudo)
+# Install script for zenvecha.
+# Supports --system (system-wide) and --user (default, ~/.local/bin).
+# Run WITHOUT sudo: the script escalates via sudo ONLY for the --system install step.
 
 set -euo pipefail
 
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+zenvecha="zenvecha"
+REPO_URL="https://github.com/oxyzenQ/zenvecha"
 
-SYSTEM=false
-if [ "${1:-}" = "--system" ]; then
-    SYSTEM=true
+usage() {
+    cat <<EOF
+Usage: $0 [--system|--user]
+
+  --system   Install system-wide to /usr/bin/${zenvecha}
+             (script invokes sudo for the install step only)
+  --user     Install to ~/.local/bin/${zenvecha}  (default, no sudo)
+
+The build step (cargo build --release --locked) ALWAYS runs as the current user.
+EOF
+}
+
+MODE="--user"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --system) MODE="--system"; shift ;;
+        --user)   MODE="--user";   shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "error: unknown argument: $1" >&2; usage; exit 2 ;;
+    esac
+done
+
+if [[ ! -f Cargo.toml ]]; then
+    echo "error: Cargo.toml not found. Run this script from the repo root." >&2
+    exit 1
 fi
 
-echo -e "${YELLOW}Building Zenvecha...${NC}"
+echo ">> [1/3] Building ${zenvecha} (release, locked)"
 cargo build --release --locked
 
-if $SYSTEM; then
-    echo -e "${YELLOW}Installing system-wide (requires sudo)...${NC}"
-    sudo install -Dm755 target/release/zenvecha /usr/local/bin/zenvecha
-    echo -e "${GREEN}Installed to /usr/local/bin/zenvecha${NC}"
-else
-    INSTALL_DIR="${HOME}/.local/bin"
-    mkdir -p "${INSTALL_DIR}"
-    install -Dm755 target/release/zenvecha "${INSTALL_DIR}/zenvecha"
-    echo -e "${GREEN}Installed to ${INSTALL_DIR}/zenvecha${NC}"
-    if ! echo "${PATH}" | grep -q "${INSTALL_DIR}"; then
-        echo -e "${YELLOW}Note: ${INSTALL_DIR} may not be in your PATH.${NC}"
-        echo "Add this to your shell profile:"
-        echo "  export PATH=\"\${HOME}/.local/bin:\${PATH}\""
-    fi
+BINARY="target/release/${zenvecha}"
+if [[ ! -f "${BINARY}" ]]; then
+    echo "error: build produced no binary at ${BINARY}" >&2
+    exit 1
 fi
 
-echo -e "${GREEN}Done. Run 'zenvecha --version' to verify.${NC}"
+echo ">> [2/3] Installing ${zenvecha} (${MODE})"
+
+case "${MODE}" in
+    --system)
+        # Invoked WITHOUT sudo; escalate only for the install step.
+        sudo install -Dm755 "${BINARY}" "/usr/bin/${zenvecha}"
+        echo "   installed: /usr/bin/${zenvecha}"
+        ;;
+    --user)
+        user_bin="${HOME}/.local/bin"
+        mkdir -p "${user_bin}"
+        install -Dm755 "${BINARY}" "${user_bin}/${zenvecha}"
+        echo "   installed: ${user_bin}/${zenvecha}"
+        ;;
+esac
+
+echo ">> [3/3] Done."
+echo
+echo "Next steps:"
+case "${MODE}" in
+    --system) echo "  - Run: ${zenvecha} --help" ;;
+    --user)   echo "  - Ensure ~/.local/bin is on your PATH" ;;
+esac
+echo "  - Docs: ${REPO_URL}#readme"

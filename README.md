@@ -62,7 +62,7 @@ cargo build --release --locked
 
 # Install
 ./scripts/install.sh           # User install (~/.local/bin)
-./scripts/install.sh --system  # System install (/usr/local/bin)
+./scripts/install.sh --system  # System install (/usr/bin)
 
 # Verify
 zenvecha --version
@@ -90,12 +90,13 @@ See [SUPPORT.md](SUPPORT.md) for details.
 
 | Document | Description |
 |----------|-------------|
-| [RULES.md](RULES.md) | Engineering rules & philosophy |
-| [ROADMAP.md](ROADMAP.md) | Development milestones |
-| [DESIGN.md](DESIGN.md) | Architecture overview |
+| [docs/RULES.md](docs/RULES.md) | Engineering rules & philosophy |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Development milestones |
+| [docs/DESIGN.md](docs/DESIGN.md) | Architecture overview |
 | [SECURITY.md](SECURITY.md) | Security policy & reporting |
 | [SUPPORT.md](SUPPORT.md) | Platform support matrix |
 | [TRADEMARK.md](TRADEMARK.md) | Trademark & IP |
+| [CHANGELOG.md](CHANGELOG.md) | Release history |
 | [docs/architecture.md](docs/architecture.md) | Detailed architecture |
 | [docs/threat-model.md](docs/threat-model.md) | Threat analysis |
 | [docs/limitations.md](docs/limitations.md) | Known limitations |
@@ -109,4 +110,21 @@ GPL-3.0-only. See [LICENSE](LICENSE).
 
 ---
 
-**© 2026 rezky_nightky (oxyzenQ)**
+## Intellectual Property & Trademark
+
+**zenvecha** is the exclusive intellectual property of
+**rezky_nightky (oxyzenQ)**.
+
+- Source code: licensed under **GPL-3.0-only** (see [LICENSE](LICENSE)).
+- Name, logo, and branding ("the Marks"): governed by
+  [TRADEMARK.md](TRADEMARK.md). The Marks are NOT covered by the GPL and
+  are reserved by the owner.
+- This project is **NOT for sale**. Unauthorized rebranding, relicensing,
+  or source-code theft is strictly prohibited.
+
+For trademark licensing or written permission, contact
+**rezky_nightky (oxyzenQ)** — https://github.com/oxyzenQ.
+
+---
+
+© 2026 rezky_nightky (oxyzenQ). All rights reserved.

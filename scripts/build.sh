@@ -64,10 +64,7 @@ check_all() {
     # 5. Codespell
     header "5/7 — codespell"
     require_tool codespell "pip install codespell"
-    codespell \
-        --skip='target,.git,LICENSE,*.png,*.jpg,*.svg,*.ico,*.lock' \
-        --ignore-words-list='crate,ser,cant,fo,hart,wee,ot,te,ba' \
-        . || fail "Spelling issues found. Run 'codespell -w' to auto-fix."
+    codespell --config .codespellrc . || fail "Spelling issues found. Run 'codespell -w' to auto-fix."
     pass "codespell"
 
     # 6. Security audit (CVE) — CI enforces, local skips if absent

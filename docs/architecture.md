@@ -1,6 +1,6 @@
 # Zenvecha Architecture
 
-See [DESIGN.md](../DESIGN.md) for the high-level architecture overview.
+See [DESIGN.md](DESIGN.md) for the high-level architecture overview.
 
 ## Detailed Architecture
 

@@ -2,7 +2,7 @@
 
 > **Vision:** Reboot only when you choose, not when a routine kernel fix forces you to.
 
-See [ROADMAP.md](../ROADMAP.md) for the full roadmap. This document contains technical implementation details.
+See [ROADMAP.md](ROADMAP.md) for the full roadmap. This document contains technical implementation details.
 
 ---
 
