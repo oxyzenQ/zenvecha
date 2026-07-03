@@ -37,7 +37,7 @@ Zenvecha uses the Linux kernel's existing live-patching infrastructure (ftrace/k
 ### Supported Kernel Versions
 
 - Linux 6.x LTS (primary target)
-- x86_64 architecture
+- amd64 architecture
 
 ---
 

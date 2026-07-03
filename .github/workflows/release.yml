@@ -47,7 +47,7 @@ jobs:
             ### Install
             ```bash
             tar xzf zenvecha-*.tar.gz
-            sudo install -Dm755 zenvecha /usr/local/bin/zenvecha
+            sudo install -Dm755 zenvecha /usr/bin/zenvecha
             zenvecha --version
             ```
 

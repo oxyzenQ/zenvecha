@@ -7,7 +7,7 @@
 | Arch Linux  | ✅ Supported  |
 | CachyOS     | ✅ Supported  |
 | Kernel 6.x  | ✅ Supported  |
-| x86_64      | ✅ Supported  |
+| amd64       | ✅ Supported  |
 | ARM64       | ❌ Not yet    |
 | Fedora      | ❌ Not yet    |
 | Ubuntu      | ❌ Not yet    |

@@ -93,7 +93,7 @@
 - [ ] Arch Linux official support
 - [ ] CachyOS official support
 - [ ] Kernel 6.x LTS
-- [ ] x86_64 only
+- [ ] amd64 only
 
 ### v1.1 "Stress Testing"
 - [ ] Firefox runtime test

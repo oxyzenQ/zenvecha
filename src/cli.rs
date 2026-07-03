@@ -8,7 +8,7 @@
 use std::io::{self, Write};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const BUILD: &str = "linux-x86_64";
+const BUILD: &str = "linux-amd64";
 const COMMIT: &str = env!("ZENVECHA_COMMIT_HASH");
 
 pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {

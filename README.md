@@ -40,7 +40,7 @@ zenvecha researches safe, verifiable methods for applying runtime patches to the
 - Reduce unnecessary desktop reboots
 - Safety first — never compromise system stability
 - Open source (GPL-3.0-only)
-- Desktop-first (Arch Linux / CachyOS, x86_64, kernel 6.x)
+- Desktop-first (Arch Linux / CachyOS, amd64, kernel 6.x)
 
 ### What zenvecha is NOT
 
@@ -77,7 +77,7 @@ zenvecha --version
 | Arch Linux  | ✅ Supported  |
 | CachyOS     | ✅ Supported  |
 | Kernel 6.x  | ✅ Supported  |
-| x86_64      | ✅ Supported  |
+| amd64       | ✅ Supported  |
 | ARM64       | ❌ Not yet    |
 | Windows     | ❌ Never      |
 | macOS       | ❌ Never      |

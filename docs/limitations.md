@@ -6,7 +6,7 @@
 Zenvecha v0.0.1 is the foundation phase. No kernel patching is implemented.
 
 ### Architecture-Specific
-- x86_64 only
+- amd64 only
 - No ARM, RISC-V, or other architectures
 
 ### Kernel Version
