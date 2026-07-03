@@ -39,4 +39,3 @@ jobs:
           files: |
             zenvecha-*.tar.gz
             zenvecha-*.tar.gz.sha512sum
-          generate_release_notes: true
