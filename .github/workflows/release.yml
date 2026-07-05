@@ -73,10 +73,10 @@ jobs:
           b2sum "${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.b2sum"
           # SHAKE256 via Python (cross-platform, consistent 64-byte output)
           python3 -c "
-            import hashlib
-            data = open('${PKG_DIR}.tar.gz', 'rb').read()
-            h = hashlib.shake_256(data).hexdigest(64)
-            print(f'{h}  ${PKG_DIR}.tar.gz')
+          import hashlib
+          data = open('${PKG_DIR}.tar.gz', 'rb').read()
+          h = hashlib.shake_256(data).hexdigest(64)
+          print(f'{h}  ${PKG_DIR}.tar.gz')
           " > "${PKG_DIR}.tar.gz.shake256"
 
           echo "=== Checksums ==="
