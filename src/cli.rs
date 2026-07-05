@@ -8,7 +8,50 @@
 use std::io::{self, Write};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const BUILD: &str = "linux-amd64";
+/// Dynamic build target: detects arch + libc env at compile time.
+/// Returns e.g. "linux-amd64-gnu" (glibc, dynamic) or "linux-amd64-musl"
+/// (static) for x86_64 Linux builds.
+const BUILD: &str = {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "musl"))]
+    {
+        "linux-amd64-musl"
+    }
+    #[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "gnu"))]
+    {
+        "linux-amd64-gnu"
+    }
+    #[cfg(all(
+        target_os = "linux",
+        target_arch = "x86_64",
+        not(any(target_env = "musl", target_env = "gnu"))
+    ))]
+    {
+        "linux-amd64"
+    }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64", target_env = "musl"))]
+    {
+        "linux-aarch64-musl"
+    }
+    #[cfg(all(target_os = "linux", target_arch = "aarch64", target_env = "gnu"))]
+    {
+        "linux-aarch64-gnu"
+    }
+    #[cfg(all(
+        target_os = "linux",
+        target_arch = "aarch64",
+        not(any(target_env = "musl", target_env = "gnu"))
+    ))]
+    {
+        "linux-aarch64"
+    }
+    #[cfg(not(any(
+        all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64")
+    )))]
+    {
+        "unknown"
+    }
+};
 const COMMIT: &str = env!("ZENVECHA_COMMIT_HASH");
 
 pub fn dispatch() -> Result<(), Box<dyn std::error::Error>> {
