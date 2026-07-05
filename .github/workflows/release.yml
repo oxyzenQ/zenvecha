@@ -71,8 +71,8 @@ jobs:
           # Checksums: SHA-512 (classical) + BLAKE2b-512 + SHAKE256 (quantum-resistant)
           sha512sum "${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.sha512sum"
           b2sum "${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.b2sum"
-          HASH=$(openssl dgst -shake256 "${PKG_DIR}.tar.gz" | awk -F'= ' '{print $2}')
-          echo "${HASH}  ${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.shake256"
+          # SHAKE256 via Python (cross-platform, consistent 64-byte output)
+          python3 -c "import hashlib; h=hashlib.shake_256(open('${PKG_DIR}.tar.gz','rb').read()).hexdigest(64); print(f'{h}  ${PKG_DIR}.tar.gz')" > "${PKG_DIR}.tar.gz.shake256"
 
           echo "=== Checksums ==="
           cat "${PKG_DIR}.tar.gz.sha512sum"
