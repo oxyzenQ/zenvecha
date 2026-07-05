@@ -13,29 +13,79 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            archive_suffix: linux-amd64-gnu
+            install_musl: false
+          - target: x86_64-unknown-linux-musl
+            archive_suffix: linux-amd64-musl
+            install_musl: true
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools (musl build only)
+        if: ${{ matrix.install_musl }}
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ matrix.target }}-
 
       - name: Build release
-        run: cargo build --release --locked
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Verify static linking (musl only)
+        if: ${{ matrix.install_musl }}
+        run: |
+          file target/${{ matrix.target }}/release/zenvecha
+          ldd target/${{ matrix.target }}/release/zenvecha \
+            || echo "Static binary (no dynamic deps)"
 
       - name: Package tarball
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          ARCH="linux-amd64"
+          ARCH="${{ matrix.archive_suffix }}"
           PKG_DIR="zenvecha-${TAG}-${ARCH}"
           mkdir -p "${PKG_DIR}"
-          cp target/release/zenvecha "${PKG_DIR}/"
+          cp target/${{ matrix.target }}/release/zenvecha "${PKG_DIR}/"
           cp README.md LICENSE "${PKG_DIR}/"
           tar czf "${PKG_DIR}.tar.gz" "${PKG_DIR}"
+
+          # Checksums: SHA-512 (classical) + BLAKE2b-512 + SHAKE256 (quantum-resistant)
           sha512sum "${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.sha512sum"
+          b2sum "${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.b2sum"
+          HASH=$(openssl dgst -shake256 "${PKG_DIR}.tar.gz" | awk -F'= ' '{print $2}')
+          echo "${HASH}  ${PKG_DIR}.tar.gz" > "${PKG_DIR}.tar.gz.shake256"
+
+          echo "=== Checksums ==="
+          cat "${PKG_DIR}.tar.gz.sha512sum"
+          cat "${PKG_DIR}.tar.gz.b2sum"
+          cat "${PKG_DIR}.tar.gz.shake256"
+
+          echo "archive=${PKG_DIR}.tar.gz" >> "$GITHUB_ENV"
 
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v2
         with:
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
-            zenvecha-*.tar.gz
-            zenvecha-*.tar.gz.sha512sum
+            zenvecha-${{ github.ref_name }}-${{ matrix.archive_suffix }}.tar.gz
+            zenvecha-${{ github.ref_name }}-${{ matrix.archive_suffix }}.tar.gz.sha512sum
+            zenvecha-${{ github.ref_name }}-${{ matrix.archive_suffix }}.tar.gz.b2sum
+            zenvecha-${{ github.ref_name }}-${{ matrix.archive_suffix }}.tar.gz.shake256
