@@ -64,9 +64,12 @@ cargo build --release --locked
 ./scripts/install.sh           # User install (~/.local/bin)
 ./scripts/install.sh --system  # System install (/usr/bin)
 
-# Verify
+# Verify install
 zenvecha --version
 ```
+
+Release artifacts also ship quantum-resistant checksums (BLAKE2b + SHAKE256).
+See [docs/VERIFY_RELEASE.md](docs/VERIFY_RELEASE.md) for verification instructions.
 
 ---
 
