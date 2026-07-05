@@ -2,27 +2,64 @@ name: CI
 on:
   push:
     branches: [main]
-    paths:
-      - '**.rs'
-      - '**.toml'
-      - '**.lock'
-      - '.github/workflows/ci.yml'
-      - 'scripts/**'
   pull_request:
     branches: [main]
-    paths:
-      - '**.rs'
-      - '**.toml'
-      - '**.lock'
-      - '.github/workflows/ci.yml'
-      - 'scripts/**'
 
 env:
   CARGO_TERM_COLOR: always
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      core: ${{ steps.detect.outputs.core }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect core file changes
+        id: detect
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE=$(git rev-parse HEAD~1 2>/dev/null || git rev-list --max-parents=0 HEAD)
+            HEAD="${{ github.sha }}"
+          fi
+          FILES=$(git diff --name-only "$BASE" "$HEAD" 2>/dev/null || git ls-files)
+          if echo "$FILES" | grep -qE '\.(rs|toml)$|Cargo\.lock$|^build\.rs$|^rust-toolchain|^scripts/|^\.cargo/'; then
+            echo "core=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "core=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  lint:
+    needs: changes
+    name: Codespell + YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install codespell + yamllint
+        run: pip install codespell yamllint
+
+      - name: Run codespell
+        run: codespell
+
+      - name: Run yamllint
+        run: yamllint .github/workflows/
+
+      - name: Run actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@latest
+          ~/go/bin/actionlint .github/workflows/*.yml
+
   gatekeeper:
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    name: Build + Test + Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,9 +91,6 @@ jobs:
           path: ~/.cargo/bin/cargo-deny
           key: ${{ runner.os }}-cargo-deny-v0.19.1
         id: cache-deny
-
-      - name: Install codespell
-        run: pip install codespell
 
       - name: Install cargo-audit
         if: steps.cache-audit.outputs.cache-hit != 'true'
@@ -90,13 +124,3 @@ jobs:
 
       - name: Run gatekeeper
         run: ./scripts/build.sh --check-all
-
-      - name: Check yamllint
-        run: |
-          pip install yamllint
-          yamllint .github/workflows/
-
-      - name: Check actionlint
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@latest
-          ~/go/bin/actionlint .github/workflows/*.yml
