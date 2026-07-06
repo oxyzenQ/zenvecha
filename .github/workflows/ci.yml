@@ -122,5 +122,8 @@ jobs:
             ~/.cargo/bin/
           chmod +x ~/.cargo/bin/cargo-deny
 
+      - name: Install codespell
+        run: pip install codespell
+
       - name: Run gatekeeper
         run: ./scripts/build.sh --check-all
