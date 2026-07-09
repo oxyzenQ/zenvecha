@@ -65,22 +65,22 @@ struct proc_dir_entry *zenvecha_proc_root;
 
 static int descriptor_show(struct seq_file *m, void *v)
 {
-	const char *value = m->private;
+        const char *value = m->private;
 
-	seq_printf(m, "%s\n", value);
-	return 0;
+        seq_printf(m, "%s\n", value);
+        return 0;
 }
 
 static int descriptor_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, descriptor_show, PDE_DATA(inode));
+        return single_open(file, descriptor_show, PDE_DATA(inode));
 }
 
 static const struct proc_ops descriptor_proc_ops = {
-	.proc_open    = descriptor_open,
-	.proc_read    = seq_read,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
+        .proc_open    = descriptor_open,
+        .proc_read    = seq_read,
+        .proc_lseek   = seq_lseek,
+        .proc_release = single_release,
 };
 
 // ── Semantic bridge: /proc/zenvecha/semantic.runtime_risk ──────────────
@@ -92,53 +92,53 @@ char zenvecha_runtime_risk[16] = "low";
 
 static int runtime_risk_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%s\n", zenvecha_runtime_risk);
-	return 0;
+        seq_printf(m, "%s\n", zenvecha_runtime_risk);
+        return 0;
 }
 
 static int runtime_risk_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, runtime_risk_show, NULL);
+        return single_open(file, runtime_risk_show, NULL);
 }
 
 static ssize_t runtime_risk_write(struct file *file, const char __user *buf,
-				  size_t count, loff_t *ppos)
+                                  size_t count, loff_t *ppos)
 {
-	char tmp[16];
-	size_t len = min_t(size_t, count, sizeof(tmp) - 1);
+        char tmp[16];
+        size_t len = min_t(size_t, count, sizeof(tmp) - 1);
 
-	if (copy_from_user(tmp, buf, len))
-		return -EFAULT;
-	tmp[len] = '\0';
+        if (copy_from_user(tmp, buf, len))
+                return -EFAULT;
+        tmp[len] = '\0';
 
-	/* strip trailing newline */
-	if (len > 0 && tmp[len - 1] == '\n')
-		tmp[len - 1] = '\0';
+        /* strip trailing newline */
+        if (len > 0 && tmp[len - 1] == '\n')
+                tmp[len - 1] = '\0';
 
-	if (!strcmp(tmp, "low") || !strcmp(tmp, "medium") ||
-	    !strcmp(tmp, "high") || !strcmp(tmp, "critical")) {
-		strncpy(zenvecha_runtime_risk, tmp,
-			sizeof(zenvecha_runtime_risk) - 1);
-		zenvecha_runtime_risk[sizeof(zenvecha_runtime_risk) - 1] = '\0';
-	} else {
-		pr_warn("semantic.runtime_risk: invalid value '%s'\n", tmp);
-		return -EINVAL;
-	}
+        if (!strcmp(tmp, "low") || !strcmp(tmp, "medium") ||
+            !strcmp(tmp, "high") || !strcmp(tmp, "critical")) {
+                strncpy(zenvecha_runtime_risk, tmp,
+                        sizeof(zenvecha_runtime_risk) - 1);
+                zenvecha_runtime_risk[sizeof(zenvecha_runtime_risk) - 1] = '\0';
+        } else {
+                pr_warn("semantic.runtime_risk: invalid value '%s'\n", tmp);
+                return -EINVAL;
+        }
 
-	return count;
+        return count;
 }
 
 static const struct proc_ops runtime_risk_ops = {
-	.proc_open    = runtime_risk_open,
-	.proc_read    = seq_read,
-	.proc_write   = runtime_risk_write,
-	.proc_lseek   = seq_lseek,
-	.proc_release = single_release,
+        .proc_open    = runtime_risk_open,
+        .proc_read    = seq_read,
+        .proc_write   = runtime_risk_write,
+        .proc_lseek   = seq_lseek,
+        .proc_release = single_release,
 };
 
 bool zenvecha_runtime_risk_is_low(void)
 {
-	return strncmp(zenvecha_runtime_risk, "low", 3) == 0;
+        return strncmp(zenvecha_runtime_risk, "low", 3) == 0;
 }
 
 // ── Capability registration ────────────────────────────────────────────
@@ -149,99 +149,109 @@ bool zenvecha_runtime_risk_is_low(void)
 
 static void create_capability_entries(void)
 {
-	size_t i, j;
+        size_t i, j;
 
-	for (i = 0; i < zenvecha_probes_count; i++) {
-		const struct capability_probe *p = zenvecha_probes[i];
-		const struct capability_descriptor *descs = p->discover();
+        for (i = 0; i < zenvecha_probes_count; i++) {
+                const struct capability_probe *p = zenvecha_probes[i];
+                const struct capability_descriptor *descs = p->discover();
 
-		for (j = 0; j < p->count; j++) {
-			if (!proc_create_data(descs[j].key, 0444,
-					      zenvecha_proc_root,
-					      &descriptor_proc_ops,
-					      (void *)descs[j].value))
-				pr_warn("failed to create /proc/zenvecha/%s\n",
-					descs[j].key);
-		}
-	}
+                for (j = 0; j < p->count; j++) {
+                        if (!proc_create_data(descs[j].key, 0444,
+                                              zenvecha_proc_root,
+                                              &descriptor_proc_ops,
+                                              (void *)descs[j].value))
+                                pr_warn("failed to create /proc/zenvecha/%s\n",
+                                        descs[j].key);
+                }
+        }
 }
 
 static void remove_capability_entries(void)
 {
-	size_t i, j;
+        size_t i, j;
 
-	for (i = 0; i < zenvecha_probes_count; i++) {
-		const struct capability_probe *p = zenvecha_probes[i];
-		const struct capability_descriptor *descs = p->discover();
+        for (i = 0; i < zenvecha_probes_count; i++) {
+                const struct capability_probe *p = zenvecha_probes[i];
+                const struct capability_descriptor *descs = p->discover();
 
-		for (j = 0; j < p->count; j++)
-			remove_proc_entry(descs[j].key, zenvecha_proc_root);
-	}
+                for (j = 0; j < p->count; j++)
+                        remove_proc_entry(descs[j].key, zenvecha_proc_root);
+        }
 }
 
 // ── Module init / exit ─────────────────────────────────────────────────
 
 static int __init zenvecha_init(void)
 {
-	struct preflight_result preflight;
-	size_t total_descriptors = 0;
-	size_t i;
+        struct preflight_result preflight;
+        size_t total_descriptors = 0;
+        size_t i;
 
-	preflight = zenvecha_preflight();
-	if (!preflight.ok) {
-		pr_err("preflight FAIL: %s — %s\n",
-		       preflight.fatal_check, preflight.fatal_reason);
-		pr_err("refusing to load. enable required kernel configs.\n");
-		return -ENOTSUPP;
-	}
+        /* Architecture gate — Zenvecha targets x86_64/amd64 desktop/laptop
+         * users only. ARM64, RISC-V, and other arches are out of scope
+         * (see docs/limitations.md). Refuse to load anywhere else so the
+         * userspace CLI gets a clear dmesg signal instead of a silent
+         * mismatch. */
+#if !defined(CONFIG_X86_64)
+        pr_err("architecture not supported: Zenvecha is x86_64/amd64 only\n");
+        return -ENOTSUPP;
+#endif
 
-	zenvecha_proc_root = proc_mkdir("zenvecha", NULL);
-	if (!zenvecha_proc_root) {
-		pr_err("failed to create /proc/zenvecha\n");
-		return -ENOMEM;
-	}
+        preflight = zenvecha_preflight();
+        if (!preflight.ok) {
+                pr_err("preflight FAIL: %s — %s\n",
+                       preflight.fatal_check, preflight.fatal_reason);
+                pr_err("refusing to load. enable required kernel configs.\n");
+                return -ENOTSUPP;
+        }
 
-	/* Flat capability entries (one file per descriptor) */
-	create_capability_entries();
+        zenvecha_proc_root = proc_mkdir("zenvecha", NULL);
+        if (!zenvecha_proc_root) {
+                pr_err("failed to create /proc/zenvecha\n");
+                return -ENOMEM;
+        }
 
-	/* Semantic bridge */
-	proc_create("semantic.runtime_risk", 0666, zenvecha_proc_root,
-		    &runtime_risk_ops);
+        /* Flat capability entries (one file per descriptor) */
+        create_capability_entries();
 
-	/* Livepatch nested directory */
-	if (zenvecha_livepatch_init()) {
-		pr_err("livepatch init failed\n");
-		remove_proc_entry("semantic.runtime_risk", zenvecha_proc_root);
-		remove_capability_entries();
-		proc_remove(zenvecha_proc_root);
-		return -ENOMEM;
-	}
+        /* Semantic bridge */
+        proc_create("semantic.runtime_risk", 0666, zenvecha_proc_root,
+                    &runtime_risk_ops);
 
-	for (i = 0; i < zenvecha_probes_count; i++)
-		total_descriptors += zenvecha_probes[i]->count;
+        /* Livepatch nested directory */
+        if (zenvecha_livepatch_init()) {
+                pr_err("livepatch init failed\n");
+                remove_proc_entry("semantic.runtime_risk", zenvecha_proc_root);
+                remove_capability_entries();
+                proc_remove(zenvecha_proc_root);
+                return -ENOMEM;
+        }
 
-	pr_info("Wolfzenix kernel capability discovery loaded\n");
-	pr_info("  probes: %zu, descriptors: %zu\n",
-		zenvecha_probes_count, total_descriptors);
-	pr_info("  proc: /proc/zenvecha/{version.release, symbols.total, ...}\n");
-	pr_info("  livepatch: /proc/zenvecha/livepatch/{apply,status,verify,revert}\n");
+        for (i = 0; i < zenvecha_probes_count; i++)
+                total_descriptors += zenvecha_probes[i]->count;
 
-	return 0;
+        pr_info("Wolfzenix kernel capability discovery loaded\n");
+        pr_info("  probes: %zu, descriptors: %zu\n",
+                zenvecha_probes_count, total_descriptors);
+        pr_info("  proc: /proc/zenvecha/{version.release, symbols.total, ...}\n");
+        pr_info("  livepatch: /proc/zenvecha/livepatch/{apply,status,verify,revert}\n");
+
+        return 0;
 }
 
 static void __exit zenvecha_exit(void)
 {
-	if (zenvecha_patch_is_active()) {
-		pr_warn("active patch present — refusing safe unload\n");
-		return;
-	}
+        if (zenvecha_patch_is_active()) {
+                pr_warn("active patch present — refusing safe unload\n");
+                return;
+        }
 
-	zenvecha_livepatch_exit();
-	remove_proc_entry("semantic.runtime_risk", zenvecha_proc_root);
-	remove_capability_entries();
-	proc_remove(zenvecha_proc_root);
+        zenvecha_livepatch_exit();
+        remove_proc_entry("semantic.runtime_risk", zenvecha_proc_root);
+        remove_capability_entries();
+        proc_remove(zenvecha_proc_root);
 
-	pr_info("module unloaded\n");
+        pr_info("module unloaded\n");
 }
 
 module_init(zenvecha_init);
