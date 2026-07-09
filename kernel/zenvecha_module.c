@@ -159,7 +159,7 @@ static void create_capability_entries(void)
                 const struct capability_probe *p = zenvecha_probes[i];
                 const struct capability_descriptor *descs = p->discover();
 
-                for (j = 0; j < p->count; j++) {
+                for (j = 0; j < p->count(); j++) {
                         if (!proc_create_data(descs[j].key, 0444,
                                               zenvecha_proc_root,
                                               &descriptor_proc_ops,
@@ -178,7 +178,7 @@ static void remove_capability_entries(void)
                 const struct capability_probe *p = zenvecha_probes[i];
                 const struct capability_descriptor *descs = p->discover();
 
-                for (j = 0; j < p->count; j++)
+                for (j = 0; j < p->count(); j++)
                         remove_proc_entry(descs[j].key, zenvecha_proc_root);
         }
 }
@@ -232,7 +232,7 @@ static int __init zenvecha_init(void)
         }
 
         for (i = 0; i < zenvecha_probes_count; i++)
-                total_descriptors += zenvecha_probes[i]->count;
+                total_descriptors += zenvecha_probes[i]->count();
 
         pr_info("Wolfzenix kernel capability discovery loaded\n");
         pr_info("  probes: %zu, descriptors: %zu\n",

@@ -48,7 +48,7 @@ struct capability_descriptor {
 struct capability_probe {
         const char *name;
         const struct capability_descriptor *(*discover)(void);
-        size_t count;
+        size_t (*count)(void);
 };
 
 extern const struct capability_probe *const zenvecha_probes[];

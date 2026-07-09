@@ -42,13 +42,20 @@ const struct capability_descriptor *tracepoints_probe_discover(void);
 size_t tracepoints_probe_count(void);
 
 /* Static probe wrappers — bridge discover() + count() into the
- * capability_probe struct expected by the module. */
+ * capability_probe struct expected by the module.
+ *
+ * NOTE: .count is a function POINTER (no parentheses), not a call.
+ * Static const struct initializers require compile-time constants —
+ * a function call like lower##_probe_count() is NOT a constant
+ * expression in C, even if the function returns a constant.
+ * Using the function address (pointer) is valid and is resolved
+ * at runtime when the module iterates the probe table. */
 #define PROBE(name, lower)                                                  \
-	static const struct capability_probe lower##_probe = {              \
-		.name = name,                                               \
-		.discover = lower##_probe_discover,                         \
-		.count = lower##_probe_count(),                             \
-	}
+        static const struct capability_probe lower##_probe = {              \
+                .name = name,                                               \
+                .discover = lower##_probe_discover,                         \
+                .count = lower##_probe_count,                               \
+        }
 
 PROBE("version", version);
 PROBE("symbols", symbols);
@@ -63,17 +70,17 @@ PROBE("memory", memory);
 PROBE("tracepoints", tracepoints);
 
 const struct capability_probe *const zenvecha_probes[] = {
-	&version_probe,
-	&symbols_probe,
-	&kallsyms_probe,
-	&btf_probe,
-	&modules_probe,
-	&tracing_probe,
-	&arch_probe,
-	&security_probe,
-	&scheduler_probe,
-	&memory_probe,
-	&tracepoints_probe,
+        &version_probe,
+        &symbols_probe,
+        &kallsyms_probe,
+        &btf_probe,
+        &modules_probe,
+        &tracing_probe,
+        &arch_probe,
+        &security_probe,
+        &scheduler_probe,
+        &memory_probe,
+        &tracepoints_probe,
 };
 
 const size_t zenvecha_probes_count = ARRAY_SIZE(zenvecha_probes);
