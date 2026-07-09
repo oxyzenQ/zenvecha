@@ -40,6 +40,9 @@ qemu-system-x86_64 \
 # Arch / CachyOS
 sudo pacman -S base-devel rust linux-headers
 
+# CachyOS kernels are built with clang + LTO — clang is required
+sudo pacman -S clang lld llvm
+
 # Verify kernel supports livepatch + function tracer
 zgrep -E 'CONFIG_(LIVEPATCH|FUNCTION_TRACER|MODULES)=' /proc/config.gz
 # Expected:
@@ -56,6 +59,25 @@ Standard kernels (Arch, CachyOS, Ubuntu, Debian) ship with
 If any of those three configs is missing, install a kernel that enables
 them (most distro `linux` and `linux-zen` packages do).
 
+### CachyOS clang + LTO note
+
+CachyOS kernels are built with **clang + LTO + AutoFDO + Propeller**.
+The kernel build system embeds clang-only flags
+(`-mstack-alignment`, `-mretpoline-external-thunk`, `-fsplit-lto-unit`,
+`-mllvm`) that GCC cannot parse. Building with GCC fails with:
+
+```
+gcc: error: unrecognized command-line option '-mstack-alignment=8'
+```
+
+The `kernel/Makefile` auto-detects clang-built kernels via
+`CONFIG_CC_IS_CLANG=y` in the kernel's `.config` and switches to
+`CC=clang` + `LD=ld.lld` + LLVM binutils automatically. No manual
+intervention needed — just `make` works.
+
+For one-click testing, `scripts/quick-test.sh` also auto-installs
+`clang` + `lld` + `llvm` if missing.
+
 ---
 
 ## Building the Kernel Module
@@ -65,16 +87,17 @@ them (most distro `linux` and `linux-zen` packages do).
 git clone https://github.com/oxyzenQ/zenvecha
 cd zenvecha
 
-# Build the kernel module
+# Build the kernel module (auto-detects clang/gcc based on the running kernel)
 cd kernel
 make
 
-# Expected output:
-#   CC [M]  kernel/zenvecha_module.o
-#   CC [M]  kernel/capability.o
-#   CC [M]  kernel/probes/version.o
+# Expected output on CachyOS (clang + LTO kernel):
+#   [zenvecha] kernel built with clang — using CC=clang LD=ld.lld + LLVM binutils
+#   make -C /lib/modules/$(uname -r)/build M=... modules
+#   CC [M]  zenvecha_module.o
+#   CC [M]  capability.o
 #   ...
-#   LD [M]  kernel/zenvecha.ko
+#   LD [M]  zenvecha.ko
 ```
 
 ---
@@ -122,6 +145,63 @@ sudo dmesg | tail -3
 
 ```bash
 cd kernel && make test-load
+```
+
+---
+
+## One-Click Quick Test (recommended)
+
+The fastest way to verify Zenvecha end-to-end on a real machine:
+
+```bash
+git clone https://github.com/oxyzenQ/zenvecha
+cd zenvecha
+
+sudo ./scripts/quick-test.sh
+```
+
+What it does automatically:
+
+1. **Detects toolchain** — reads `/lib/modules/$(uname -r)/build/.config` and
+   picks clang + ld.lld if the kernel was built with clang (CachyOS, Arch
+   linux-zen-LTO, etc.). Falls back to gcc otherwise.
+2. **Installs missing deps** — `clang`, `lld`, `llvm`, `rust`, `codespell`
+   via `pacman` / `apt` / `dnf`.
+3. **Verifies kernel configs** — refuses to proceed if `CONFIG_LIVEPATCH`,
+   `CONFIG_FUNCTION_TRACER`, `CONFIG_MODULES`, or `CONFIG_KALLSYMS` is missing.
+4. **Builds both artifacts** — `kernel/zenvecha.ko` + `target/release/zenvecha`.
+5. **Loads the module** — `insmod` + verifies `/proc/zenvecha/` is created
+   and no preflight failure appears in dmesg.
+6. **Runs the full patch lifecycle** — dry-run → apply → status → revert,
+   reading kernel state directly from `/proc/zenvecha/livepatch/*` to
+   confirm `applied` + `verified` + `redirect_observed`.
+7. **Clean unload** — `rmmod` and confirms no kernel oops/panic.
+
+Flags:
+- `--keep` — leave the module loaded after the test for manual debugging
+- `--no-build` — skip the build step (use pre-existing artifacts)
+
+Expected final output:
+
+```text
+╔════════════════════════════════════════════╗
+║  ZENVECHA QUICK TEST — ALL PASSED           ║
+╚════════════════════════════════════════════╝
+
+  kernel     : 7.1.2-3-cachyos
+  arch       : x86_64
+  compiler   : clang
+  module     : kernel/zenvecha.ko
+  cli        : target/release/zenvecha
+
+  Lifecycle verified:
+    dry-run  → Verdict: approved
+    apply    → applied successfully
+    status   → applied + verified + redirect_observed
+    revert   → reverted
+    unload   → clean (no oops, no panic)
+
+  No reboot was required at any point.
 ```
 
 ---
@@ -216,14 +296,36 @@ These are GPL-exported and available on all standard distro kernels.
 
 ### "Module fails to build"
 
-Ensure the kernel headers match the running kernel:
-```bash
-uname -r                       # running kernel version
-ls /lib/modules/$(uname -r)/build   # headers must exist
+**Symptom A — clang flags rejected by gcc:**
 ```
+gcc: error: unrecognized command-line option '-mstack-alignment=8'
+gcc: error: unrecognized command-line option '-mretpoline-external-thunk'
+gcc: error: unrecognized command-line option '-fsplit-lto-unit'
+```
+The running kernel was built with clang (CachyOS, Arch linux-zen-LTO).
+Install clang + lld + llvm and rebuild:
+```bash
+sudo pacman -S clang lld llvm
+cd kernel && make clean && make
+```
+The `Makefile` auto-detects clang-built kernels and switches to
+`CC=clang LD=ld.lld` — no manual override needed.
 
+**Symptom B — headers don't match running kernel:**
+```bash
+uname -r                          # running kernel version
+ls /lib/modules/$(uname -r)/build # headers must exist
+```
 If you recently updated the kernel package, reboot the VM before
 building the module — headers and running kernel must match.
+
+**Symptom C — "unknown symbol" on insmod:**
+The kernel build cannot find an exported symbol we use. Check dmesg
+for the specific symbol name. Most likely culprits:
+- `kallsyms_on_each_symbol` (requires `CONFIG_KALLSYMS=y`)
+- `for_each_kernel_tracepoint` (requires `CONFIG_TRACEPOINTS=y`)
+
+These are GPL-exported and available on all standard distro kernels.
 
 ---
 
