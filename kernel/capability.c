@@ -3,14 +3,20 @@
 
 //! Capability probe registry.
 //!
-//! Each probe is a small C file under probes/ that exports a
-//! `{domain}_probe_discover()` function returning a static array
-//! of (key, value) descriptors.
+//! Each probe is a small C file under probes/ that exports two functions:
+//!   - {domain}_probe_discover()  → returns static descriptor array
+//!   - {domain}_probe_count()     → returns array length
+//!
+//! This file declares the probe struct instances and the registry array.
+//! We use explicit struct initialization (no macros) for clear compiler
+//! diagnostics — kernel module build errors through macros are hard to
+//! read, and clang's "expected a field designator" through a #define
+//! expansion is a classic example.
 //!
 //! Adding a new probe:
-//!   1. Create probes/{domain}.c with {domain}_probe_discover()
-//!   2. Add entry to zenvecha_probes[] below
-//!   3. Bump zenvecha_probes_count if needed
+//!   1. Create probes/{domain}.c with {domain}_probe_discover() + count()
+//!   2. Add forward declarations below
+//!   3. Add a struct instance + array entry
 //!   4. Zero modifications to existing probes
 
 #include <linux/kernel.h>
@@ -41,46 +47,91 @@ size_t memory_probe_count(void);
 const struct capability_descriptor *tracepoints_probe_discover(void);
 size_t tracepoints_probe_count(void);
 
-/* Static probe wrappers — bridge discover() + count() into the
- * capability_probe struct expected by the module.
+/* Probe struct instances — explicit initialization, no macros.
  *
- * NOTE: .count is a function POINTER (no parentheses), not a call.
- * Static const struct initializers require compile-time constants —
- * a function call like lower##_probe_count() is NOT a constant
- * expression in C, even if the function returns a constant.
- * Using the function address (pointer) is valid and is resolved
- * at runtime when the module iterates the probe table. */
-#define PROBE(name, lower)                                                  \
-        static const struct capability_probe lower##_probe = {              \
-                .name = name,                                               \
-                .discover = lower##_probe_discover,                         \
-                .count = lower##_probe_count,                               \
-        }
+ * .count is a function POINTER (address, no parentheses). The struct
+ * field type is `size_t (*count)(void)`. Storing the function address
+ * is a compile-time constant — valid in a static const initializer.
+ * Calling the function (with parens) would NOT be a constant expression
+ * and is rejected by C. */
+static const struct capability_probe version_probe = {
+	.name = "version",
+	.discover = version_probe_discover,
+	.count = version_probe_count,
+};
 
-PROBE("version", version);
-PROBE("symbols", symbols);
-PROBE("kallsyms", kallsyms);
-PROBE("btf", btf);
-PROBE("modules", modules);
-PROBE("tracing", tracing);
-PROBE("architecture", arch);
-PROBE("security", security);
-PROBE("scheduler", scheduler);
-PROBE("memory", memory);
-PROBE("tracepoints", tracepoints);
+static const struct capability_probe symbols_probe = {
+	.name = "symbols",
+	.discover = symbols_probe_discover,
+	.count = symbols_probe_count,
+};
+
+static const struct capability_probe kallsyms_probe = {
+	.name = "kallsyms",
+	.discover = kallsyms_probe_discover,
+	.count = kallsyms_probe_count,
+};
+
+static const struct capability_probe btf_probe = {
+	.name = "btf",
+	.discover = btf_probe_discover,
+	.count = btf_probe_count,
+};
+
+static const struct capability_probe modules_probe = {
+	.name = "modules",
+	.discover = modules_probe_discover,
+	.count = modules_probe_count,
+};
+
+static const struct capability_probe tracing_probe = {
+	.name = "tracing",
+	.discover = tracing_probe_discover,
+	.count = tracing_probe_count,
+};
+
+static const struct capability_probe arch_probe = {
+	.name = "architecture",
+	.discover = arch_probe_discover,
+	.count = arch_probe_count,
+};
+
+static const struct capability_probe security_probe = {
+	.name = "security",
+	.discover = security_probe_discover,
+	.count = security_probe_count,
+};
+
+static const struct capability_probe scheduler_probe = {
+	.name = "scheduler",
+	.discover = scheduler_probe_discover,
+	.count = scheduler_probe_count,
+};
+
+static const struct capability_probe memory_probe = {
+	.name = "memory",
+	.discover = memory_probe_discover,
+	.count = memory_probe_count,
+};
+
+static const struct capability_probe tracepoints_probe = {
+	.name = "tracepoints",
+	.discover = tracepoints_probe_discover,
+	.count = tracepoints_probe_count,
+};
 
 const struct capability_probe *const zenvecha_probes[] = {
-        &version_probe,
-        &symbols_probe,
-        &kallsyms_probe,
-        &btf_probe,
-        &modules_probe,
-        &tracing_probe,
-        &arch_probe,
-        &security_probe,
-        &scheduler_probe,
-        &memory_probe,
-        &tracepoints_probe,
+	&version_probe,
+	&symbols_probe,
+	&kallsyms_probe,
+	&btf_probe,
+	&modules_probe,
+	&tracing_probe,
+	&arch_probe,
+	&security_probe,
+	&scheduler_probe,
+	&memory_probe,
+	&tracepoints_probe,
 };
 
 const size_t zenvecha_probes_count = ARRAY_SIZE(zenvecha_probes);
