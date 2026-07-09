@@ -42,17 +42,17 @@ ifneq ($(shell grep -c '^CONFIG_CC_IS_CLANG=y' $(KERNEL_CONFIG) 2>/dev/null),0)
     export CC := clang
     # CachyOS LTO kernels also need LLVM binutils
     ifneq ($(shell grep -cE '^(CONFIG_LTO_CLANG|CONFIG_LTO)=y' $(KERNEL_CONFIG) 2>/dev/null),0)
-        ZV_USE_LLD := 1
-        export LD := ld.lld
-        export AR := llvm-ar
-        export NM := llvm-nm
-        export OBJCOPY := llvm-objcopy
-        export OBJDUMP := llvm-objdump
-        export STRIP := llvm-strip
-        export READELF := llvm-readelf
-        export HOSTCC := clang
-        export HOSTLD := ld.lld
-        export HOSTAR := llvm-ar
+	ZV_USE_LLD := 1
+	export LD := ld.lld
+	export AR := llvm-ar
+	export NM := llvm-nm
+	export OBJCOPY := llvm-objcopy
+	export OBJDUMP := llvm-objdump
+	export STRIP := llvm-strip
+	export READELF := llvm-readelf
+	export HOSTCC := clang
+	export HOSTLD := ld.lld
+	export HOSTAR := llvm-ar
     endif
 endif
 
@@ -72,11 +72,11 @@ endif
 obj-m := zenvecha.o
 
 zenvecha-y := zenvecha_module.o capability.o \
-              probes/version.o probes/symbols.o probes/kallsyms.o \
-              probes/btf.o probes/modules.o probes/tracing.o probes/arch.o \
-              probes/security.o probes/scheduler.o probes/memory.o \
-              probes/tracepoints.o \
-              livepatch.o guard.o dummy_target.o
+	      probes/version.o probes/symbols.o probes/kallsyms.o \
+	      probes/btf.o probes/modules.o probes/tracing.o probes/arch.o \
+	      probes/security.o probes/scheduler.o probes/memory.o \
+	      probes/tracepoints.o \
+	      livepatch.o guard.o dummy_target.o
 
 # ── Build flags ─────────────────────────────────────────────────────────
 #
@@ -109,24 +109,24 @@ ifdef ZV_USE_CLANG
 endif
 
 all:
-        $(MAKE) -C $(KDIR) M=$(CURDIR) modules
+	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
 
 clean:
-        $(MAKE) -C $(KDIR) M=$(CURDIR) clean
-        rm -f *.mod *.mod.c .*.cmd modules.order Module.symvers
-        rm -f probes/.*.cmd probes/*.cmd 2>/dev/null || true
+	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
+	rm -f *.mod *.mod.c .*.cmd modules.order Module.symvers
+	rm -f probes/.*.cmd probes/*.cmd 2>/dev/null || true
 
 test-load:
-        @echo "=== Loading zenvecha ==="
-        sudo insmod zenvecha.ko
-        @echo "=== Kernel log ==="
-        sudo dmesg | tail -10
-        @echo "=== /proc/zenvecha/ entries ==="
-        ls /proc/zenvecha/ 2>/dev/null || echo "(no proc entries)"
-        @echo "=== Unloading zenvecha ==="
-        sudo rmmod zenvecha
-        @echo "=== Kernel log ==="
-        sudo dmesg | tail -5
-        @echo "=== Done ==="
+	@echo "=== Loading zenvecha ==="
+	sudo insmod zenvecha.ko
+	@echo "=== Kernel log ==="
+	sudo dmesg | tail -10
+	@echo "=== /proc/zenvecha/ entries ==="
+	ls /proc/zenvecha/ 2>/dev/null || echo "(no proc entries)"
+	@echo "=== Unloading zenvecha ==="
+	sudo rmmod zenvecha
+	@echo "=== Kernel log ==="
+	sudo dmesg | tail -5
+	@echo "=== Done ==="
 
 .PHONY: all clean test-load
