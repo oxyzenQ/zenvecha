@@ -41,6 +41,26 @@ require_tool() {
 check_all() {
     header "Zenvecha Gatekeeper — check-all"
 
+    # 0. Makefile TAB integrity — editors/tools sometimes convert TABs to
+    # spaces, which breaks GNU make recipes with 'missing separator'.
+    # Verify all recipe lines under kernel/Makefile start with a TAB.
+    header "0/7 — Makefile TAB integrity"
+    local repo_root
+    repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    local makefile="${repo_root}/kernel/Makefile"
+    if [[ -f "$makefile" ]]; then
+        # Find recipe lines: lines after a target that start with 8 spaces
+        # instead of a TAB. Grep for '^[ ]\{8\}' catches common corruption.
+        if grep -nE '^[ ]{8}' "$makefile" | grep -qvE '^[0-9]+:[ ]*#'; then
+            fail "kernel/Makefile has space-indented recipe lines (need TAB)."
+            echo "  Run: sed -i 's/^        /\t/' kernel/Makefile"
+            echo "  Offending lines:"
+            grep -nE '^[ ]{8}' "$makefile" | head -5 | sed 's/^/    /'
+            exit 1
+        fi
+    fi
+    pass "Makefile TAB integrity"
+
     # 1. Format
     header "1/7 — cargo fmt --check"
     cargo fmt -- --check || fail "Formatting issues found. Run 'cargo fmt'."
