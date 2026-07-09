@@ -51,168 +51,198 @@ static char zenvecha_active_symbol[64];
 
 bool zenvecha_patch_is_active(void)
 {
-	return atomic_read(&zenvecha_patch_active) != 0;
+        return atomic_read(&zenvecha_patch_active) != 0;
 }
 
 static bool symbol_is_known(const char *name)
 {
-	if (!name)
-		return false;
+        if (!name)
+                return false;
 
-	/* For the PoC skeleton, only zenvecha_dummy_func is a known
-	 * patchable target. Production code would call kallsyms_lookup_name
-	 * here — but that symbol is unexported since 5.7. The proper
-	 * production approach is the kprobe-trick (register a kprobe with
-	 * .symbol_name, read .addr, unregister). For now, match our own
-	 * module symbol. */
-	return strcmp(name, zenvecha_dummy_target_name()) == 0;
+        /* For the PoC skeleton, only zenvecha_dummy_func is a known
+         * patchable target. Production code would call kallsyms_lookup_name
+         * here — but that symbol is unexported since 5.7. The proper
+         * production approach is the kprobe-trick (register a kprobe with
+         * .symbol_name, read .addr, unregister). For now, match our own
+         * module symbol. */
+        return strcmp(name, zenvecha_dummy_target_name()) == 0;
 }
 
 // ── Pre-flight Guard — runs at module init ─────────────────────────────
+//
+// Gate classification:
+//   - REQUIRED (fatal): kernel cannot host zenvecha at all
+//   - RECOMMENDED (warning): skeleton works, but production ftrace redirect
+//     will need this when implemented
+//
+// Required gates:
+//   CONFIG_FUNCTION_TRACER  — ftrace infrastructure (used by production
+//                              redirect; also indicates the kernel was
+//                              built with code-patching support)
+//   CONFIG_MODULES          — module loader (we ARE a module)
+//   CONFIG_KALLSYMS         — symbol discovery probe reads kallsyms
+//
+// Recommended (non-fatal):
+//   CONFIG_LIVEPATCH        — kernel livepatch framework. Skeleton mode
+//                              (atomic flag flip via stop_machine) does
+//                              NOT use this. Production ftrace-based
+//                              redirect will require it. No prebuilt
+//                              Arch/CachyOS kernel enables this by
+//                              default — when production lands, owner
+//                              needs either linux-tkg (AUR) with the
+//                              config flipped, or a custom rebuild.
 
 struct preflight_result zenvecha_preflight(void)
 {
-	struct preflight_result r = { .ok = true };
+        struct preflight_result r = { .ok = true };
 
-	/* Gate 1: CONFIG_LIVEPATCH */
-#if !IS_ENABLED(CONFIG_LIVEPATCH)
-	r.ok = false;
-	r.fatal_check = "CONFIG_LIVEPATCH";
-	r.fatal_reason = "Livepatch support not compiled into this kernel";
-	return r;
-#endif
-
-	/* Gate 2: CONFIG_FUNCTION_TRACER */
+        /* Gate 1: CONFIG_FUNCTION_TRACER (REQUIRED) */
 #if !IS_ENABLED(CONFIG_FUNCTION_TRACER)
-	r.ok = false;
-	r.fatal_check = "CONFIG_FUNCTION_TRACER";
-	r.fatal_reason = "Function tracer support not compiled into this kernel";
-	return r;
+        r.ok = false;
+        r.fatal_check = "CONFIG_FUNCTION_TRACER";
+        r.fatal_reason = "Function tracer support not compiled into this kernel";
+        return r;
 #endif
 
-	/* Gate 3: CONFIG_MODULES */
+        /* Gate 2: CONFIG_MODULES (REQUIRED) */
 #if !IS_ENABLED(CONFIG_MODULES)
-	r.ok = false;
-	r.fatal_check = "CONFIG_MODULES";
-	r.fatal_reason = "Module loader not compiled into this kernel";
-	return r;
+        r.ok = false;
+        r.fatal_check = "CONFIG_MODULES";
+        r.fatal_reason = "Module loader not compiled into this kernel";
+        return r;
 #endif
 
-	/* All compile-time gates passed. */
-	pr_info("preflight: CONFIG_LIVEPATCH + FUNCTION_TRACER + MODULES ok\n");
-	return r;
+        /* Gate 3: CONFIG_KALLSYMS (REQUIRED) */
+#if !IS_ENABLED(CONFIG_KALLSYMS)
+        r.ok = false;
+        r.fatal_check = "CONFIG_KALLSYMS";
+        r.fatal_reason = "kallsyms support not compiled into this kernel";
+        return r;
+#endif
+
+        /* All required gates passed. */
+        pr_info("preflight: FUNCTION_TRACER + MODULES + KALLSYMS ok\n");
+
+        /* Gate 4: CONFIG_LIVEPATCH (RECOMMENDED, non-fatal) */
+#if !IS_ENABLED(CONFIG_LIVEPATCH)
+        pr_warn("preflight: CONFIG_LIVEPATCH is not set — skeleton mode works,\n");
+        pr_warn("         production ftrace redirect will need it (future phase)\n");
+        pr_warn("         no prebuilt Arch/CachyOS kernel enables this by default\n");
+#endif
+
+        return r;
 }
 
 // ── Target Validation Guard — runs before every patch ──────────────────
 
 int zenvecha_validate_target(const char *symbol_name)
 {
-	/* Gate 4: RuntimeRisk must be "low" */
-	if (!zenvecha_runtime_risk_is_low()) {
-		pr_warn("gate 4 FAIL: runtime_risk=%s (must be 'low')\n",
-			zenvecha_runtime_risk);
-		return -EPERM;
-	}
+        /* Gate 4: RuntimeRisk must be "low" */
+        if (!zenvecha_runtime_risk_is_low()) {
+                pr_warn("gate 4 FAIL: runtime_risk=%s (must be 'low')\n",
+                        zenvecha_runtime_risk);
+                return -EPERM;
+        }
 
-	/* Gate 5: No active patch */
-	if (zenvecha_patch_is_active()) {
-		pr_warn("gate 5 FAIL: active patch on '%s'\n",
-			zenvecha_active_symbol);
-		return -EBUSY;
-	}
+        /* Gate 5: No active patch */
+        if (zenvecha_patch_is_active()) {
+                pr_warn("gate 5 FAIL: active patch on '%s'\n",
+                        zenvecha_active_symbol);
+                return -EBUSY;
+        }
 
-	/* Gate 6: Symbol exists in our target registry */
-	if (!symbol_is_known(symbol_name)) {
-		pr_warn("gate 6 FAIL: unknown symbol '%s'\n", symbol_name);
-		return -ENOENT;
-	}
+        /* Gate 6: Symbol exists in our target registry */
+        if (!symbol_is_known(symbol_name)) {
+                pr_warn("gate 6 FAIL: unknown symbol '%s'\n", symbol_name);
+                return -ENOENT;
+        }
 
-	return 0;
+        return 0;
 }
 
 // ── Atomic Execution Guard — stop_machine callback ─────────────────────
 
 struct patch_payload {
-	const char *symbol_name;
-	int error; /* 0 = success, negative errno on failure */
+        const char *symbol_name;
+        int error; /* 0 = success, negative errno on failure */
 };
 
 static int apply_patch_atomic(void *data)
 {
-	struct patch_payload *p = data;
+        struct patch_payload *p = data;
 
-	/* All other CPUs are halted by stop_machine. We are now in the
-	 * single critical section where it is safe to modify execution
-	 * state.
-	 *
-	 * Skeleton: flip the dummy function's atomic flag.
-	 * Production: install ftrace handler at the target address. */
-	zenvecha_dummy_set_patched(true);
-	p->error = 0;
-	return 0;
+        /* All other CPUs are halted by stop_machine. We are now in the
+         * single critical section where it is safe to modify execution
+         * state.
+         *
+         * Skeleton: flip the dummy function's atomic flag.
+         * Production: install ftrace handler at the target address. */
+        zenvecha_dummy_set_patched(true);
+        p->error = 0;
+        return 0;
 }
 
 static int revert_patch_atomic(void *data)
 {
-	struct patch_payload *p = data;
+        struct patch_payload *p = data;
 
-	zenvecha_dummy_set_patched(false);
-	p->error = 0;
-	return 0;
+        zenvecha_dummy_set_patched(false);
+        p->error = 0;
+        return 0;
 }
 
 // ── Guarded apply / revert entry points ────────────────────────────────
 
 int zenvecha_guarded_apply(const char *symbol_name)
 {
-	struct patch_payload payload = { .symbol_name = symbol_name };
-	int ret;
+        struct patch_payload payload = { .symbol_name = symbol_name };
+        int ret;
 
-	/* Run gates 4-6 */
-	ret = zenvecha_validate_target(symbol_name);
-	if (ret)
-		return ret;
+        /* Run gates 4-6 */
+        ret = zenvecha_validate_target(symbol_name);
+        if (ret)
+                return ret;
 
-	/* Atomic apply via stop_machine — halts ALL other CPUs */
-	ret = stop_machine(apply_patch_atomic, &payload, NULL);
-	if (ret) {
-		pr_err("stop_machine(apply) failed: %d\n", ret);
-		return ret;
-	}
-	if (payload.error) {
-		pr_err("apply callback failed: %d\n", payload.error);
-		return payload.error;
-	}
+        /* Atomic apply via stop_machine — halts ALL other CPUs */
+        ret = stop_machine(apply_patch_atomic, &payload, NULL);
+        if (ret) {
+                pr_err("stop_machine(apply) failed: %d\n", ret);
+                return ret;
+        }
+        if (payload.error) {
+                pr_err("apply callback failed: %d\n", payload.error);
+                return payload.error;
+        }
 
-	/* Commit state */
-	atomic_set(&zenvecha_patch_active, 1);
-	strncpy(zenvecha_active_symbol, symbol_name,
-		sizeof(zenvecha_active_symbol) - 1);
-	zenvecha_active_symbol[sizeof(zenvecha_active_symbol) - 1] = '\0';
+        /* Commit state */
+        atomic_set(&zenvecha_patch_active, 1);
+        strncpy(zenvecha_active_symbol, symbol_name,
+                sizeof(zenvecha_active_symbol) - 1);
+        zenvecha_active_symbol[sizeof(zenvecha_active_symbol) - 1] = '\0';
 
-	pr_info("patch applied: %s (42 → 99)\n", symbol_name);
-	return 0;
+        pr_info("patch applied: %s (42 → 99)\n", symbol_name);
+        return 0;
 }
 
 int zenvecha_guarded_revert(void)
 {
-	struct patch_payload payload = { .symbol_name = NULL };
-	int ret;
+        struct patch_payload payload = { .symbol_name = NULL };
+        int ret;
 
-	if (!zenvecha_patch_is_active()) {
-		pr_info("revert: no active patch\n");
-		return 0;
-	}
+        if (!zenvecha_patch_is_active()) {
+                pr_info("revert: no active patch\n");
+                return 0;
+        }
 
-	ret = stop_machine(revert_patch_atomic, &payload, NULL);
-	if (ret) {
-		pr_err("stop_machine(revert) failed: %d\n", ret);
-		return ret;
-	}
+        ret = stop_machine(revert_patch_atomic, &payload, NULL);
+        if (ret) {
+                pr_err("stop_machine(revert) failed: %d\n", ret);
+                return ret;
+        }
 
-	pr_info("patch reverted: %s (99 → 42)\n", zenvecha_active_symbol);
-	atomic_set(&zenvecha_patch_active, 0);
-	zenvecha_active_symbol[0] = '\0';
+        pr_info("patch reverted: %s (99 → 42)\n", zenvecha_active_symbol);
+        atomic_set(&zenvecha_patch_active, 0);
+        zenvecha_active_symbol[0] = '\0';
 
-	return 0;
+        return 0;
 }

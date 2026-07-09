@@ -116,22 +116,32 @@ pass "all dependencies present"
 # ── Step 3: Verify required kernel configs ──────────────────────────────
 step "3/7 — Kernel config preflight"
 
+# Required gates (fatal if missing)
 missing=()
-grep -q '^CONFIG_LIVEPATCH=y'        "$KCONFIG" || missing+=("CONFIG_LIVEPATCH=y")
 grep -q '^CONFIG_FUNCTION_TRACER=y'  "$KCONFIG" || missing+=("CONFIG_FUNCTION_TRACER=y")
 grep -q '^CONFIG_MODULES=y'          "$KCONFIG" || missing+=("CONFIG_MODULES=y")
 grep -q '^CONFIG_KALLSYMS=y'         "$KCONFIG" || missing+=("CONFIG_KALLSYMS=y")
 
 if [[ ${#missing[@]} -gt 0 ]]; then
-    fail "missing kernel configs:"
+    fail "missing REQUIRED kernel configs:"
     for c in "${missing[@]}"; do
         echo "    - $c"
     done
-    info "zenvecha requires these for the 6-gate safety protocol"
-    info "CachyOS / Arch linux / linux-zen ship with all of these enabled"
+    info "zenvecha skeleton needs these for ftrace + module loading + symbol discovery"
+    info "all standard Arch/CachyOS kernels ship with these enabled"
     exit 1
 fi
-pass "LIVEPATCH + FUNCTION_TRACER + MODULES + KALLSYMS all =y"
+pass "REQUIRED gates: FUNCTION_TRACER + MODULES + KALLSYMS all =y"
+
+# Recommended gate (non-fatal warning)
+if ! grep -q '^CONFIG_LIVEPATCH=y' "$KCONFIG"; then
+    info "RECOMMENDED gate CONFIG_LIVEPATCH is not set"
+    info "  → skeleton mode works, production ftrace redirect will need it"
+    info "  → no prebuilt Arch/CachyOS kernel enables this by default"
+    info "  → for production phase, use AUR linux-tkg with the config flipped"
+else
+    pass "RECOMMENDED gate: CONFIG_LIVEPATCH=y (production-ready)"
+fi
 
 # Verify x86_64 (zenvecha is amd64-only)
 ARCH="$(uname -m)"

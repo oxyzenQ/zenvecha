@@ -41,14 +41,14 @@ extern struct proc_dir_entry *zenvecha_proc_root;
 //   3. Zero modifications to existing probes
 
 struct capability_descriptor {
-	const char *key;    /* dotted filename under /proc/zenvecha/ */
-	const char *value;  /* static value string */
+        const char *key;    /* dotted filename under /proc/zenvecha/ */
+        const char *value;  /* static value string */
 };
 
 struct capability_probe {
-	const char *name;
-	const struct capability_descriptor *(*discover)(void);
-	size_t count;
+        const char *name;
+        const struct capability_descriptor *(*discover)(void);
+        size_t count;
 };
 
 extern const struct capability_probe *const zenvecha_probes[];
@@ -65,11 +65,21 @@ int zenvecha_livepatch_init(void);
 void zenvecha_livepatch_exit(void);
 
 // ── Guard Layer (preflight + target validation + atomic exec) ──────────
+//
+// Preflight gate classification:
+//   REQUIRED (fatal at init):
+//     1. CONFIG_FUNCTION_TRACER  — ftrace infra + code-patching support
+//     2. CONFIG_MODULES          — module loader (we ARE a module)
+//     3. CONFIG_KALLSYMS         — symbol discovery probe
+//   RECOMMENDED (warning at init, skeleton still works):
+//     4. CONFIG_LIVEPATCH        — needed only for production ftrace
+//                                  redirect (future phase). No prebuilt
+//                                  Arch/CachyOS kernel enables this.
 
 struct preflight_result {
-	bool ok;
-	const char *fatal_check;   /* NULL when ok=true */
-	const char *fatal_reason;
+        bool ok;
+        const char *fatal_check;   /* NULL when ok=true */
+        const char *fatal_reason;
 };
 
 struct preflight_result zenvecha_preflight(void);

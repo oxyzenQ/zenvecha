@@ -42,22 +42,50 @@ sudo pacman -S base-devel rust linux-headers
 
 # CachyOS kernels are built with clang + LTO — clang is required
 sudo pacman -S clang lld llvm
-
-# Verify kernel supports livepatch + function tracer
-zgrep -E 'CONFIG_(LIVEPATCH|FUNCTION_TRACER|MODULES)=' /proc/config.gz
-# Expected:
-#   CONFIG_LIVEPATCH=y
-#   CONFIG_FUNCTION_TRACER=y
-#   CONFIG_MODULES=y
 ```
 
-The Zenvecha kernel module is written in **C** for universal distro
-compatibility — Rust-for-Linux (`CONFIG_RUST=y`) is **not required**.
-Standard kernels (Arch, CachyOS, Ubuntu, Debian) ship with
-`CONFIG_LIVEPATCH=y` and `CONFIG_FUNCTION_TRACER=y` by default.
+### Required kernel configs (skeleton mode)
 
-If any of those three configs is missing, install a kernel that enables
-them (most distro `linux` and `linux-zen` packages do).
+Zenvecha skeleton mode (atomic flag flip via `stop_machine`) needs three
+kernel configs. **All standard Arch/CachyOS kernels ship with these
+enabled by default** — no recompile needed.
+
+```bash
+zgrep -E 'CONFIG_(FUNCTION_TRACER|MODULES|KALLSYMS)=' /proc/config.gz
+# Expected:
+#   CONFIG_FUNCTION_TRACER=y
+#   CONFIG_MODULES=y
+#   CONFIG_KALLSYMS=y
+```
+
+If any of these three is missing, you have a very unusual kernel (perhaps
+a minimal embedded build). Install the stock `linux` or `linux-cachyos`
+package.
+
+### Recommended kernel config (production ftrace redirect)
+
+```bash
+zgrep CONFIG_LIVEPATCH /proc/config.gz
+# Expected on stock kernels:
+#   # CONFIG_LIVEPATCH is not set
+```
+
+**No prebuilt Arch/CachyOS kernel enables `CONFIG_LIVEPATCH=y`.** This
+is a deliberate upstream choice — the livepatch consistency model adds
+overhead, and most desktop users don't need it.
+
+The skeleton PoC works without it. When the production ftrace-based
+redirect lands (future phase), one of these will be needed:
+
+1. **AUR `linux-tkg`** — TkG kernel allows custom configs; flip
+   `CONFIG_LIVEPATCH=y` in the PKGBUILD interactive prompt.
+2. **Custom CachyOS rebuild** — clone `CachyOS/linux-cachyos`, edit
+   `linux-cachyos/config`, run `makepkg`. ~10 min build on modern hardware.
+3. **Ubuntu/Fedora** — both ship server kernels with `CONFIG_LIVEPATCH=y`
+   enabled by default (Canonical Livepatch / kpatch).
+
+For now, the kernel module logs a `pr_warn` at init when
+`CONFIG_LIVEPATCH` is missing — non-fatal, skeleton continues to work.
 
 ### CachyOS clang + LTO note
 
