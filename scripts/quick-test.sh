@@ -159,9 +159,19 @@ if [[ $SKIP_BUILD -eq 0 ]]; then
     make -C kernel clean >/dev/null 2>&1 || true
 
     info "building kernel module..."
-    make -C kernel 2>&1 | tail -10
+    if ! make -C kernel 2>&1 | tee /tmp/zv_kernel_build.log | tail -20; then
+        fail "kernel module build failed"
+        echo ""
+        echo "=== Error lines (full log at /tmp/zv_kernel_build.log) ==="
+        grep -E 'error:|Error' /tmp/zv_kernel_build.log | head -20
+        echo ""
+        echo "=== First 5 warnings ==="
+        grep -E 'warning:' /tmp/zv_kernel_build.log | head -5
+        exit 1
+    fi
     if [[ ! -f kernel/zenvecha.ko ]]; then
         fail "kernel module build failed — zenvecha.ko not produced"
+        grep -E 'error:|Error' /tmp/zv_kernel_build.log | head -20
         exit 1
     fi
     pass "kernel/zenvecha.ko built"

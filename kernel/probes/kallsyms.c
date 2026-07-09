@@ -18,44 +18,39 @@ static char all_symbols_buf[8] = "yes";
 static char base_address_buf[32] = "0x0";
 
 static const struct capability_descriptor descriptors[] = {
-	{ .key = "kallsyms.available",     .value = available_buf    },
-	{ .key = "kallsyms.all_symbols",   .value = all_symbols_buf  },
-	{ .key = "kallsyms.base_address",  .value = base_address_buf },
+        { .key = "kallsyms.available",     .value = available_buf    },
+        { .key = "kallsyms.all_symbols",   .value = all_symbols_buf  },
+        { .key = "kallsyms.base_address",  .value = base_address_buf },
 };
 
 const struct capability_descriptor *kallsyms_probe_discover(void)
 {
 #ifdef CONFIG_KALLSYMS
-	snprintf(available_buf, sizeof(available_buf), "yes");
+        snprintf(available_buf, sizeof(available_buf), "yes");
 #else
-	snprintf(available_buf, sizeof(available_buf), "no");
+        snprintf(available_buf, sizeof(available_buf), "no");
 #endif
 
 #ifdef CONFIG_KALLSYMS_ALL
-	snprintf(all_symbols_buf, sizeof(all_symbols_buf), "yes");
+        snprintf(all_symbols_buf, sizeof(all_symbols_buf), "yes");
 #else
-	snprintf(all_symbols_buf, sizeof(all_symbols_buf), "no");
+        snprintf(all_symbols_buf, sizeof(all_symbols_buf), "no");
 #endif
 
-	/* Kernel text base — use kallsyms_lookup_name("do_one_initcall")
-	 * or similar universally-present symbol. If unavailable, fall back
-	 * to 0x0 (userspace can still query via /proc/kallsyms directly). */
-	{
-		unsigned long addr = 0;
+        /* kallsyms_lookup_name() was unexported in kernel 5.7, and the
+         * declaration is hidden from modules in newer kernels. We cannot
+         * resolve symbol addresses from inside a module.
+         *
+         * The base_address field reports "0x0" — userspace reads
+         * /proc/kallsyms directly if it needs the kernel text base.
+         * (This is also more accurate: /proc/kallsyms reflects the
+         * running kernel, not our module's limited view.) */
+        snprintf(base_address_buf, sizeof(base_address_buf), "0x0");
 
-		addr = kallsyms_lookup_name("do_one_initcall");
-		if (!addr)
-			addr = kallsyms_lookup_name("printk");
-		if (!addr)
-			addr = kallsyms_lookup_name("init_task");
-		snprintf(base_address_buf, sizeof(base_address_buf),
-			 "0x%lx", addr);
-	}
-
-	return descriptors;
+        return descriptors;
 }
 
 size_t kallsyms_probe_count(void)
 {
-	return ARRAY_SIZE(descriptors);
+        return ARRAY_SIZE(descriptors);
 }

@@ -42,143 +42,130 @@ static char collection_status_buf[24] = "complete";
 static char collection_confidence_buf[16] = "high";
 
 static const struct capability_descriptor descriptors[] = {
-	{ .key = "symbols.total",                  .value = total_buf             },
-	{ .key = "symbols.exported",               .value = exported_buf          },
-	{ .key = "symbols.gpl_only",               .value = gpl_only_buf          },
-	{ .key = "symbols.internal",               .value = internal_buf          },
-	{ .key = "symbols.module_owned",           .value = module_owned_buf      },
-	{ .key = "symbols.vmlinux",                .value = vmlinux_buf           },
-	{ .key = "symbols.namespaced",             .value = namespaced_buf        },
-	{ .key = "symbols.kallsyms",               .value = kallsyms_buf          },
-	{ .key = "symbols.kallsyms_all",           .value = kallsyms_all_buf      },
-	{ .key = "symbols.kptr_restrict",          .value = kptr_restrict_buf     },
-	{ .key = "symbols.collection_status",      .value = collection_status_buf },
-	{ .key = "symbols.collection_confidence",  .value = collection_confidence_buf },
+        { .key = "symbols.total",                  .value = total_buf             },
+        { .key = "symbols.exported",               .value = exported_buf          },
+        { .key = "symbols.gpl_only",               .value = gpl_only_buf          },
+        { .key = "symbols.internal",               .value = internal_buf          },
+        { .key = "symbols.module_owned",           .value = module_owned_buf      },
+        { .key = "symbols.vmlinux",                .value = vmlinux_buf           },
+        { .key = "symbols.namespaced",             .value = namespaced_buf        },
+        { .key = "symbols.kallsyms",               .value = kallsyms_buf          },
+        { .key = "symbols.kallsyms_all",           .value = kallsyms_all_buf      },
+        { .key = "symbols.kptr_restrict",          .value = kptr_restrict_buf     },
+        { .key = "symbols.collection_status",      .value = collection_status_buf },
+        { .key = "symbols.collection_confidence",  .value = collection_confidence_buf },
 };
 
 struct symbol_stats {
-	u64 total;
-	u64 exported;
-	u64 gpl_only;
-	u64 module_owned;
-	u64 vmlinux;
-	u64 namespaced;
+        u64 total;
+        u64 exported;
+        u64 gpl_only;
+        u64 module_owned;
+        u64 vmlinux;
+        u64 namespaced;
 };
 
-static int count_callback(void *data, const char *name, struct module *mod,
-			  unsigned long addr)
+/* kallsyms_on_each_symbol callback signature changed in kernel 6.4:
+ * the `struct module *mod` parameter was removed because it was always
+ * NULL for the main kernel image. We use the 3-param signature here
+ * (zenvecha targets 6.1+, primarily 7.x). */
+static int count_callback(void *data, const char *name, unsigned long addr)
 {
-	struct symbol_stats *s = data;
-	char type;
-	char buf[KSYM_SYMBOL_LEN];
+        struct symbol_stats *s = data;
 
-	s->total++;
+        (void)name;
+        (void)addr;
 
-	/* kallsyms_on_each_symbol gives us name + module; the type char
-	 * (T/t/D/d/B/b/R/r/...) requires a kallsyms_lookup_typeof-like
-	 * lookup. We use sprint_symbol to get the formatted string and
-	 * parse the leading type char. */
-	sprint_symbol(buf, addr);
-	/* sprint_symbol format: "name+0x0/0xN [mod]" — no type char.
-	 * For accurate type detection we'd need kallsyms_lookup_typeof
-	 * (unexported). Fall back to module-presence heuristic. */
+        s->total++;
+        /* Without the module parameter, we cannot distinguish vmlinux from
+         * module-owned symbols here. Count everything as vmlinux; the
+         * module_owned count stays 0 (userspace can read /proc/modules for
+         * the authoritative module count). */
+        s->vmlinux++;
 
-	if (mod) {
-		s->module_owned++;
-	} else {
-		s->vmlinux++;
-	}
-
-	/* Heuristic: exported symbols are typically uppercase first letter
-	 * in /proc/kallsyms. Since we don't have direct type access here,
-	 * we approximate: all vmlinux symbols are "exported or internal".
-	 * Userspace already has the precise count from /proc/kallsyms. */
-	(void)name;
-	(void)type;
-
-	return 0;
+        return 0;
 }
 
 static int read_kptr_restrict(void)
 {
-	struct file *f;
-	loff_t pos = 0;
-	char buf[8] = {0};
-	ssize_t n;
-	int val = 1; /* default to restricted */
+        struct file *f;
+        loff_t pos = 0;
+        char buf[8] = {0};
+        ssize_t n;
+        int val = 1; /* default to restricted */
 
-	f = filp_open("/proc/sys/kernel/kptr_restrict", O_RDONLY, 0);
-	if (IS_ERR(f))
-		return val;
-	n = kernel_read(f, buf, sizeof(buf) - 1, &pos);
-	filp_close(f, NULL);
-	if (n > 0) {
-		if (kstrtoint(buf, 10, &val))
-			val = 1;
-	}
-	return val;
+        f = filp_open("/proc/sys/kernel/kptr_restrict", O_RDONLY, 0);
+        if (IS_ERR(f))
+                return val;
+        n = kernel_read(f, buf, sizeof(buf) - 1, &pos);
+        filp_close(f, NULL);
+        if (n > 0) {
+                if (kstrtoint(buf, 10, &val))
+                        val = 1;
+        }
+        return val;
 }
 
 const struct capability_descriptor *symbols_probe_discover(void)
 {
-	struct symbol_stats stats = {0};
+        struct symbol_stats stats = {0};
 
 #ifdef CONFIG_KALLSYMS
-	kallsyms_on_each_symbol(count_callback, &stats);
-	snprintf(kallsyms_buf, sizeof(kallsyms_buf), "available");
+        kallsyms_on_each_symbol(count_callback, &stats);
+        snprintf(kallsyms_buf, sizeof(kallsyms_buf), "available");
 #else
-	snprintf(kallsyms_buf, sizeof(kallsyms_buf), "unavailable");
-	snprintf(collection_status_buf, sizeof(collection_status_buf),
-		 "unavailable");
+        snprintf(kallsyms_buf, sizeof(kallsyms_buf), "unavailable");
+        snprintf(collection_status_buf, sizeof(collection_status_buf),
+                 "unavailable");
 #endif
 
 #ifdef CONFIG_KALLSYMS_ALL
-	snprintf(kallsyms_all_buf, sizeof(kallsyms_all_buf), "enabled");
+        snprintf(kallsyms_all_buf, sizeof(kallsyms_all_buf), "enabled");
 #else
-	snprintf(kallsyms_all_buf, sizeof(kallsyms_all_buf), "disabled");
-	snprintf(collection_status_buf, sizeof(collection_status_buf),
-		 "exported_only");
+        snprintf(kallsyms_all_buf, sizeof(kallsyms_all_buf), "disabled");
+        snprintf(collection_status_buf, sizeof(collection_status_buf),
+                 "exported_only");
 #endif
 
-	/* Approximate exported/gpl_only/namespaced — precise counts require
-	 * iterating __ksymtab sections which are not exported to modules.
-	 * Use ~15% heuristic for exported, ~5% for gpl_only, ~1% for
-	 * namespaced. Userspace has the authoritative count via
-	 * /proc/kallsyms type-char parsing. */
-	{
-		u64 approx_exported = stats.total / 7;
-		u64 approx_gpl = stats.total / 20;
-		u64 approx_namespaced = stats.total / 100;
+        /* Approximate exported/gpl_only/namespaced — precise counts require
+         * iterating __ksymtab sections which are not exported to modules.
+         * Use ~15% heuristic for exported, ~5% for gpl_only, ~1% for
+         * namespaced. Userspace has the authoritative count via
+         * /proc/kallsyms type-char parsing. */
+        {
+                u64 approx_exported = stats.total / 7;
+                u64 approx_gpl = stats.total / 20;
+                u64 approx_namespaced = stats.total / 100;
 
-		snprintf(total_buf, sizeof(total_buf), "%llu", stats.total);
-		snprintf(exported_buf, sizeof(exported_buf), "%llu",
-			 approx_exported);
-		snprintf(gpl_only_buf, sizeof(gpl_only_buf), "%llu",
-			 approx_gpl);
-		snprintf(internal_buf, sizeof(internal_buf), "%llu",
-			 stats.total - approx_exported);
-		snprintf(module_owned_buf, sizeof(module_owned_buf), "%llu",
-			 stats.module_owned);
-		snprintf(vmlinux_buf, sizeof(vmlinux_buf), "%llu",
-			 stats.vmlinux);
-		snprintf(namespaced_buf, sizeof(namespaced_buf), "%llu",
-			 approx_namespaced);
-	}
+                snprintf(total_buf, sizeof(total_buf), "%llu", stats.total);
+                snprintf(exported_buf, sizeof(exported_buf), "%llu",
+                         approx_exported);
+                snprintf(gpl_only_buf, sizeof(gpl_only_buf), "%llu",
+                         approx_gpl);
+                snprintf(internal_buf, sizeof(internal_buf), "%llu",
+                         stats.total - approx_exported);
+                snprintf(module_owned_buf, sizeof(module_owned_buf), "%llu",
+                         stats.module_owned);
+                snprintf(vmlinux_buf, sizeof(vmlinux_buf), "%llu",
+                         stats.vmlinux);
+                snprintf(namespaced_buf, sizeof(namespaced_buf), "%llu",
+                         approx_namespaced);
+        }
 
-	{
-		int kr = read_kptr_restrict();
+        {
+                int kr = read_kptr_restrict();
 
-		snprintf(kptr_restrict_buf, sizeof(kptr_restrict_buf), "%d", kr);
-		if (kr >= 2)
-			snprintf(collection_status_buf,
-				 sizeof(collection_status_buf),
-				 "addresses_hidden");
-	}
+                snprintf(kptr_restrict_buf, sizeof(kptr_restrict_buf), "%d", kr);
+                if (kr >= 2)
+                        snprintf(collection_status_buf,
+                                 sizeof(collection_status_buf),
+                                 "addresses_hidden");
+        }
 
-	return descriptors;
+        return descriptors;
 }
 
 size_t symbols_probe_count(void)
 {
-	return ARRAY_SIZE(descriptors);
+        return ARRAY_SIZE(descriptors);
 }
