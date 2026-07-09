@@ -31,7 +31,7 @@ Dependencies are a last resort.
 - **Modular `main.rs`:** Bootstrap and wiring only. Target: <150 LOC.
 - **Module Structure:**
   ```
-  kernel/          # Kernel-space Rust modules
+  kernel/          # Kernel-space C module (universal distro compat)
   userspace/       # Userspace tools and CLI
   src/             # Core library (cli, types, services)
   ```

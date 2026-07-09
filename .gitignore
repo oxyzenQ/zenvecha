@@ -5,6 +5,20 @@ target
 # Rust backup files
 **/*.rs.bk
 
+# Kernel module build artifacts
+kernel/*.ko
+kernel/*.o
+kernel/*.cmd
+kernel/.*.cmd
+kernel/*.mod
+kernel/*.mod.c
+kernel/*.symvers
+kernel/modules.order
+kernel/.tmp_versions/
+kernel/probes/*.o
+kernel/probes/*.cmd
+kernel/probes/.*.cmd
+
 # MSVC debug
 *.pdb
 

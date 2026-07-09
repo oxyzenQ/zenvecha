@@ -45,11 +45,12 @@
 
 ### 3. Kernel Module (`kernel/`)
 
-- Rust kernel module (using `rust-linux-kernel` or raw kernel APIs)
-- Symbol discovery via kallsyms
-- Function hooking (ftrace / kprobe-based)
-- Safe memory access patterns
-- Clean module init/exit
+- C kernel module (universal distro compatibility — no `CONFIG_RUST=y` needed)
+- Symbol discovery via kallsyms + `/proc` filesystem reads
+- Atomic patch execution via `stop_machine()` + ftrace hooks
+- 6-gate safety protocol (3 compile-time + 3 runtime gates)
+- Structured `key=value` proc interface under `/proc/zenvecha/*`
+- Clean module init/exit with preflight + unload guards
 
 ### 4. Userspace Tools (`userspace/`)
 
