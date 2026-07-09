@@ -73,7 +73,11 @@ static int descriptor_show(struct seq_file *m, void *v)
 
 static int descriptor_open(struct inode *inode, struct file *file)
 {
-        return single_open(file, descriptor_show, PDE_DATA(inode));
+        /* pde_data() replaced PDE_DATA() in kernel 6.x — same semantics,
+         * returns the void* passed to proc_create_data(). Modern kernels
+         * only export pde_data() as a function; PDE_DATA() macro was
+         * removed. */
+        return single_open(file, descriptor_show, pde_data(inode));
 }
 
 static const struct proc_ops descriptor_proc_ops = {
