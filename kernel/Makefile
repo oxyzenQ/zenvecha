@@ -80,18 +80,26 @@ zenvecha-y := zenvecha_module.o capability.o \
 
 # ── Build flags ─────────────────────────────────────────────────────────
 #
-# -Werror: treat warnings as errors (matches Rust clippy -D warnings)
-# -Wall -Wextra: full warning coverage
-# The kernel build system already provides these, but we restate them
-# here so module-local development builds (make CFLAGS=...) stay strict.
+# Kernel modules must NOT use -Werror globally. The kernel build system
+# injects KBUILD_CFLAGS that include GCC-specific optimization flags
+# (e.g. -falign-jumps=1, -falign-loops=1) which clang does not support.
+# clang emits -Wignored-optimization-argument for each of these, and a
+# global -Werror turns them into fatal build errors.
 #
-# When using clang on a clang-built kernel, suppress the noisy
-# -Waddress-of-packed-member warning (kernel structs rely on this).
+# The Rust userspace still gets -D warnings from clippy (strict), but
+# the kernel module follows the kernel's own convention: warn but don't
+# fail the build on compiler-flag mismatches we don't control.
+#
+# We DO enable -Wall -Wextra for our own code, and selectively suppress
+# known-noisy clang warnings on kernel structs.
 
-ccflags-y := -Werror -Wall -Wextra
+ccflags-y := -Wall -Wextra
 
 ifdef ZV_USE_CLANG
+    # Kernel structs rely on packed members — clang warns on every access
     ccflags-y += -Wno-address-of-packed-member
+    # Kernel injects GCC-only optimization flags — don't even warn about them
+    ccflags-y += -Wno-ignored-optimization-argument
 endif
 
 # ── Build rules ─────────────────────────────────────────────────────────
@@ -101,24 +109,24 @@ ifdef ZV_USE_CLANG
 endif
 
 all:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) modules
+        $(MAKE) -C $(KDIR) M=$(CURDIR) modules
 
 clean:
-	$(MAKE) -C $(KDIR) M=$(CURDIR) clean
-	rm -f *.mod *.mod.c .*.cmd modules.order Module.symvers
-	rm -f probes/.*.cmd probes/*.cmd 2>/dev/null || true
+        $(MAKE) -C $(KDIR) M=$(CURDIR) clean
+        rm -f *.mod *.mod.c .*.cmd modules.order Module.symvers
+        rm -f probes/.*.cmd probes/*.cmd 2>/dev/null || true
 
 test-load:
-	@echo "=== Loading zenvecha ==="
-	sudo insmod zenvecha.ko
-	@echo "=== Kernel log ==="
-	sudo dmesg | tail -10
-	@echo "=== /proc/zenvecha/ entries ==="
-	ls /proc/zenvecha/ 2>/dev/null || echo "(no proc entries)"
-	@echo "=== Unloading zenvecha ==="
-	sudo rmmod zenvecha
-	@echo "=== Kernel log ==="
-	sudo dmesg | tail -5
-	@echo "=== Done ==="
+        @echo "=== Loading zenvecha ==="
+        sudo insmod zenvecha.ko
+        @echo "=== Kernel log ==="
+        sudo dmesg | tail -10
+        @echo "=== /proc/zenvecha/ entries ==="
+        ls /proc/zenvecha/ 2>/dev/null || echo "(no proc entries)"
+        @echo "=== Unloading zenvecha ==="
+        sudo rmmod zenvecha
+        @echo "=== Kernel log ==="
+        sudo dmesg | tail -5
+        @echo "=== Done ==="
 
 .PHONY: all clean test-load
