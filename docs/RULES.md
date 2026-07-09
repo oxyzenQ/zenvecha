@@ -100,9 +100,62 @@ Dependencies are a last resort.
 - `TRADEMARK.md`
 - `SECURITY.md`
 - `SUPPORT.md`
-- `ROADMAP.md`
 - `DESIGN.md`
 - `docs/architecture.md`
 - `docs/threat-model.md`
 - `docs/limitations.md`
 - `docs/adr/` — Architecture Decision Records
+
+---
+
+## 🔒 9. PATH SECURITY — WHITELIST POLICY
+
+Zenvecha's state I/O must NEVER read or write dangerous system paths
+(e.g. `/etc/shadow`, `~/.ssh/`, `~/.gnupg/`) unless explicitly required
+by the feature. This is a **whitelist** policy, not a blacklist — only
+specific, named paths are allowed; everything else is blocked by default.
+
+### Current State (v0.5.x — Early Dev)
+
+Zenvecha currently has **no user-controlled state I/O**. All filesystem
+reads are from hardcoded kernel/system paths:
+
+- `/proc/version`, `/proc/mounts`, `/proc/kallsyms`, `/proc/config.gz`
+- `/proc/sys/kernel/*`, `/proc/modules`
+- `/boot/config-*`, `/etc/os-release`
+- `/proc/zenvecha/livepatch/*` (kernel module procfs interface)
+
+No `$HOME`-derived paths, no `$XDG_*` environment variables, no config
+files under user home. Therefore **no pathguard module is needed yet**.
+
+### Future Requirement
+
+When zenvecha adds user-controlled state I/O (config file, cache, PID
+file, audit log, patch storage), a `pathguard` module MUST be implemented
+following the same pattern used in zelynic/zylaxion:
+
+1. **`resolve_state_dir()`** — validates `$HOME` / `$XDG_RUNTIME_DIR`
+   before deriving state paths. Falls back to `/tmp` when the env var
+   points to a dangerous location.
+
+2. **`is_dangerous()`** — rejects:
+   - System paths: `/etc`, `/usr`, `/var`, `/bin`, `/sbin`, `/lib`,
+     `/lib64`, `/boot`, `/root`, `/proc`, `/sys`, `/dev`
+   - User credential stores: `~/.ssh`, `~/.gnupg`, `~/.kwallet`,
+     `~/.local/share/keyrings`
+   - Path traversal: `/tmp/../etc` (defeated via lexical normalization)
+
+3. **Default-deny** — only allowlisted directories are valid for state.
+   The tool must run (fall back to `/tmp`) rather than refuse to start,
+   but it must NEVER write state into protected directories.
+
+4. **Wiring** — every `fs::write()`, `File::create()`, or path-deriving
+   function that uses user-controlled env vars MUST go through pathguard
+   before touching the filesystem.
+
+### Never Gated (BY DESIGN)
+
+- Kernel procfs writes to `/proc/zenvecha/*` — hardcoded kernel module
+  interface, not user-controlled via environment variables
+- Read-only kernel/system path reads (`/proc/*`, `/boot/*`, `/etc/os-release`)
+  — these are system inspection, not state I/O

@@ -94,7 +94,6 @@ See [SUPPORT.md](SUPPORT.md) for details.
 | Document | Description |
 |----------|-------------|
 | [docs/RULES.md](docs/RULES.md) | Engineering rules & philosophy |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Development milestones |
 | [docs/DESIGN.md](docs/DESIGN.md) | Architecture overview |
 | [SECURITY.md](SECURITY.md) | Security policy & reporting |
 | [SUPPORT.md](SUPPORT.md) | Platform support matrix |
