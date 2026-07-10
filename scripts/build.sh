@@ -13,6 +13,12 @@ if [ -f "$HOME/.cargo/env" ]; then
     . "$HOME/.cargo/env"
 fi
 
+# Also pick up user-local bin (codespell on some distros installs there)
+if [ -d "$HOME/.local/bin" ]; then
+    PATH="$HOME/.local/bin:$PATH"
+    export PATH
+fi
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -43,19 +49,23 @@ check_all() {
 
     # 0. Makefile TAB integrity — editors/tools sometimes convert TABs to
     # spaces, which breaks GNU make recipes with 'missing separator'.
-    # Verify all recipe lines under kernel/Makefile start with a TAB.
+    # We flag lines that start with 8 spaces AND contain a known recipe
+    # command ($(MAKE), rm -f, @echo, sudo, insmod, rmmod, dmesg, ls /proc).
+    # Makefile assignments inside ifdef/ifneq blocks also use 8-space
+    # indent (e.g. 'export CC := clang') — those are valid and NOT flagged.
     header "0/7 — Makefile TAB integrity"
     local repo_root
     repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     local makefile="${repo_root}/kernel/Makefile"
     if [[ -f "$makefile" ]]; then
-        # Find recipe lines: lines after a target that start with 8 spaces
-        # instead of a TAB. Grep for '^[ ]\{8\}' catches common corruption.
-        if grep -nE '^[ ]{8}' "$makefile" | grep -qvE '^[0-9]+:[ ]*#'; then
+        # Pattern: 8 spaces followed by a recipe command keyword
+        local bad_lines
+        bad_lines="$(grep -nE '^        (\$\(MAKE\)|rm -f|@echo|sudo |insmod|rmmod|dmesg|ls /proc)' "$makefile" || true)"
+        if [[ -n "$bad_lines" ]]; then
             fail "kernel/Makefile has space-indented recipe lines (need TAB)."
             echo "  Run: sed -i 's/^        /\t/' kernel/Makefile"
             echo "  Offending lines:"
-            grep -nE '^[ ]{8}' "$makefile" | head -5 | sed 's/^/    /'
+            echo "$bad_lines" | head -5 | sed 's/^/    /'
             exit 1
         fi
     fi

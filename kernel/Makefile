@@ -95,6 +95,12 @@ zenvecha-y := zenvecha_module.o capability.o \
 
 ccflags-y := -Wall -Wextra
 
+# Probe files under probes/ need to include zenvecha.h which lives in
+# the parent kernel/ directory. -I$(src) adds the module root to the
+# include search path so probes/version.c can write #include "zenvecha.h"
+# without a relative path like "../zenvecha.h" (fragile if files move).
+ccflags-y += -I$(src)
+
 ifdef ZV_USE_CLANG
     # Kernel structs rely on packed members — clang warns on every access
     ccflags-y += -Wno-address-of-packed-member
