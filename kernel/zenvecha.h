@@ -102,6 +102,12 @@ bool zenvecha_patch_is_active(void);
 u64 zenvecha_dummy_func(void);
 const char *zenvecha_dummy_target_name(void);
 
+/* Internal state setters/getters — called only from guard.c inside
+ * stop_machine. Defined in dummy_target.c, declared here so guard.c
+ * can reference them without a separate header. */
+void zenvecha_dummy_set_patched(bool patched);
+bool zenvecha_dummy_is_patched(void);
+
 // ── Semantic Bridge (optional kernel-side RuntimeRisk gate) ────────────
 //
 // /proc/zenvecha/semantic.runtime_risk (read+write)
